@@ -15,14 +15,24 @@
 - **Normalized Recurring Revenue (MRR / ARR)**: Accurately normalizes monthly, quarterly, semi-annual, and annual billing frequencies. Paused and cancelled subscriptions are never counted towards active MRR.
 - **Enterprise CRM & B2B Account Management**:
   - **Companies & Corporate Accounts**: Manage corporate entities, employee sizes, annual revenue, and hierarchical linkages.
-  - **Contacts Directory**: Track key decision-makers and executive point-of-contacts.
-  - **Visual Sales Pipeline (Kanban)**: 6-stage sales progression (Discovery, Qualification, Proposal, Negotiation, Closed Won, Closed Lost) with live probability-weighted revenue forecasting.
+  - **Contacts Directory**: Track decision-makers and executive points of contact.
+  - **Visual Sales Pipeline (Kanban)**: 6-stage sales progression with live probability-weighted revenue forecasting.
   - **Calendar & Meetings Hub**: Unified schedule for demos, renewal check-ins, negotiation calls, and follow-ups.
-  - **Communication Hub**: Centralized timeline logging phone calls, emails, demos, and notes.
+  - **Communication Hub & Email Engine**: Centralized outbound email dispatch with Nodemailer, 6 responsive enterprise HTML templates, live template preview, and durable delivery tracking (`EmailLog`).
+  - **In-App Notification Center**: Real-time alert badges for renewals, overdue invoices, SLA breaches, and workflow triggers.
 - **Service Desk & Support Operations**:
-  - **Support Tickets**: SLA-prioritized ticketing with auto-generated ticket numbers (`TCK-xxxx`), thread messaging, and status triage.
-  - **Document Vault**: Encrypted file storage engine with download streaming and categories (Contracts, MSAs, Proposals, NDAs).
+  - **Support Tickets**: SLA-monitored ticketing (`TCK-xxxx`), conversation threading, agent assignments, and escalation jobs.
+  - **Document Vault**: AES-256-GCM encrypted document vault with tamper detection and stream decryption.
   - **Workflow Automation Center**: Event-driven rules engine with automated follow-up tasks, webhook triggers, and execution history.
+- **Real Payment Gateway Integration**:
+  - **Razorpay Integration**: Multi-provider payment gateway abstraction (Razorpay for India/INR UPI/Netbanking/Cards, Stripe for international USD, and Sandbox provider).
+  - **Cryptographic Security**: HMAC-SHA256 signature verification with timing-safe comparison, idempotency guards, and automated refund management.
+- **Background Jobs & Worker Engine**:
+  - Persistent MongoDB-backed background queue (`JobExecution`) with atomic distributed locking, exponential backoff, renewal scans, and overdue invoice flagging.
+- **SaaS Multi-Tenancy, Limits & Data Migration**:
+  - **Hard Plan Limit Enforcement**: `enforcePlanLimit` middleware actively guards user, customer, contact, deal, storage, automation, and email allowances.
+  - **Onboarding Wizard**: Step-by-step company setup tracker with visual usage meters in Settings.
+  - **CSV Data Migration**: Enterprise import and export engine for Customers, Leads, Contacts, Companies, and Deals with duplicate prevention.
 - **AI-Powered Customer Intelligence**:
   - **AI CRM Copilot**: Full-page conversational assistant querying live workspace metrics, high-risk churn accounts, and pipeline deals.
   - **Churn Risk Radar**: Transparent 0–100 heuristic scoring based on overdue payments, interaction recency, and ticket severity.
@@ -255,11 +265,51 @@ npm run test:server
 ### Payments & Invoices
 - `GET /payments` — List payments (with CSV export)
 - `POST /payments` — Record manual payment
-- `GET /payments/overdue` — List overdue invoices
+- `GET /payments/config` — Fetch safe public gateway key ID (without secret keys)
+- `POST /payments/create-order` — Create Razorpay / Stripe gateway order
+- `POST /payments/verify` — Verify cryptographic signature and settle payment
+- `POST /payments/:id/refund` — Issue refund via gateway
+- `POST /payments/webhook` — Process incoming gateway webhooks with signature checks
 - `GET /invoices` — List invoices
 - `POST /invoices` — Create itemized invoice
 - `GET /invoices/:id/pdf` — Stream downloadable invoice PDF
 - `POST /invoices/:id/record-payment` — Apply payment against invoice balance
+
+### Communication Hub & Emails
+- `GET /communications/logs` — List durable outbound email logs
+- `POST /communications/send` — Dispatch outbound email with template rendering
+- `POST /communications/preview` — Render live email template preview
+- `POST /communications/test` — Send verification test email to admin
+
+### Background Jobs & Queue
+- `GET /jobs/metrics` — Live queue depth, running workers, and failure metrics
+- `POST /jobs/trigger` — Manually trigger scheduled scans (renewals, overdue, SLAs)
+- `POST /jobs/:id/retry` — Retry failed background job
+
+### Data Migration (CSV)
+- `POST /data/import/:entityType` — Batch import entities with duplicate detection
+- `GET /data/export/:entityType` — Stream RFC-4180 compliant CSV export
+
+### Health & Readiness Probes
+- `GET /health` — Process liveness probe, uptime, and correlation ID
+- `GET /ready` — Database connection readiness probe (HTTP 200 ready / HTTP 503 unready)
+
+---
+
+## 📚 Complete Phase 3 Documentation
+
+Detailed engineering reports are available in the [`docs/`](./docs) directory:
+1. [`PRODUCTION_DEPLOYMENT_GUIDE.md`](./docs/PRODUCTION_DEPLOYMENT_GUIDE.md) — Nginx, PM2, Docker, SSL, and scaling
+2. [`REAL_PAYMENT_GATEWAY_INTEGRATION.md`](./docs/REAL_PAYMENT_GATEWAY_INTEGRATION.md) — Razorpay, Stripe, HMAC, and webhooks
+3. [`EMAIL_AND_NOTIFICATION_INTEGRATION.md`](./docs/EMAIL_AND_NOTIFICATION_INTEGRATION.md) — Nodemailer, templates, and logging
+4. [`BACKGROUND_JOB_ARCHITECTURE.md`](./docs/BACKGROUND_JOB_ARCHITECTURE.md) — Persistent MongoDB queue & concurrency
+5. [`SAAS_ORGANIZATION_AND_BILLING.md`](./docs/SAAS_ORGANIZATION_AND_BILLING.md) — Multi-tenancy, plan limits, and onboarding
+6. [`SECURITY_AND_PRIVACY_AUDIT.md`](./docs/SECURITY_AND_PRIVACY_AUDIT.md) — Threat models, AES-256-GCM, and timing attacks
+7. [`BACKUP_AND_RECOVERY_GUIDE.md`](./docs/BACKUP_AND_RECOVERY_GUIDE.md) — mongodump, S3 off-site backups, and DR scripts
+8. [`CI_CD_AND_RELEASE_WORKFLOW.md`](./docs/CI_CD_AND_RELEASE_WORKFLOW.md) — GitHub Actions CI/CD and release tagging
+9. [`END_TO_END_TEST_RESULTS_PHASE_3.md`](./docs/END_TO_END_TEST_RESULTS_PHASE_3.md) — 14/14 automated test verification
+10. [`PERFORMANCE_AND_SCALABILITY_PHASE_3.md`](./docs/PERFORMANCE_AND_SCALABILITY_PHASE_3.md) — Latency benchmarks & compound indexing
+11. [`PHASE_3_COMPLETION_REPORT.md`](./docs/PHASE_3_COMPLETION_REPORT.md) — Master Phase 3 sign-off report
 
 ### AI Intelligence Suite
 - `POST /insights/analyze/:customerId` — Recalculate customer churn score (0–100)

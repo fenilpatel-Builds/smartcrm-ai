@@ -173,3 +173,76 @@ export const listAllOrganizations = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getOrganizationUsage = async (req, res, next) => {
+  try {
+    const org = await Organization.findById(req.organizationId);
+    if (!org) return res.status(404).json({ success: false, message: 'Organization not found.' });
+
+    const [userCount, customerCount, contactCount, dealCount, docAgg] = await Promise.all([
+      User.countDocuments({ organizationId: req.organizationId }),
+      import('../models/Customer.js').then(({ Customer }) => Customer.countDocuments({ organizationId: req.organizationId, isDeleted: false })),
+      import('../models/Contact.js').then(({ Contact }) => Contact.countDocuments({ organizationId: req.organizationId })),
+      import('../models/Deal.js').then(({ Deal }) => Deal.countDocuments({ organizationId: req.organizationId, isDeleted: false, stage: { $nin: ['closed_won', 'closed_lost'] } })),
+      import('../models/Document.js').then(({ Document }) =>
+        Document.aggregate([
+          { $match: { organizationId: req.organizationId, isDeleted: false } },
+          { $group: { _id: null, totalBytes: { $sum: '$fileSize' }, count: { $sum: 1 } } },
+        ])
+      ),
+    ]);
+
+    const storageMB = Math.round(((docAgg[0]?.totalBytes || 0) / (1024 * 1024)) * 100) / 100;
+    const limits = org.planLimits || {
+      maxUsers: 25,
+      maxCustomers: 500,
+      maxContacts: 1000,
+      maxDeals: 200,
+      maxStorageMB: 1024,
+      monthlyEmailAllowance: 2000,
+      emailsSentThisMonth: 0,
+    };
+
+    res.json({
+      success: true,
+      data: {
+        planName: org.subscriptionConfiguration?.planName || 'Enterprise SaaS',
+        status: org.subscriptionConfiguration?.status || 'active',
+        usage: {
+          users: { current: userCount, limit: limits.maxUsers, percent: Math.min(100, Math.round((userCount / limits.maxUsers) * 100)) },
+          customers: { current: customerCount, limit: limits.maxCustomers, percent: Math.min(100, Math.round((customerCount / limits.maxCustomers) * 100)) },
+          contacts: { current: contactCount, limit: limits.maxContacts, percent: Math.min(100, Math.round((contactCount / limits.maxContacts) * 100)) },
+          deals: { current: dealCount, limit: limits.maxDeals, percent: Math.min(100, Math.round((dealCount / limits.maxDeals) * 100)) },
+          storage: { currentMB: storageMB, limitMB: limits.maxStorageMB, percent: Math.min(100, Math.round((storageMB / limits.maxStorageMB) * 100)) },
+          emails: { sentThisMonth: limits.emailsSentThisMonth || 0, allowance: limits.monthlyEmailAllowance || 2000, percent: Math.min(100, Math.round(((limits.emailsSentThisMonth || 0) / (limits.monthlyEmailAllowance || 2000)) * 100)) },
+        },
+        onboarding: org.onboarding || { isCompleted: false, step: 1 },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateOnboardingStep = async (req, res, next) => {
+  try {
+    const { step, isCompleted } = req.body;
+    const org = await Organization.findById(req.organizationId);
+    if (!org) return res.status(404).json({ success: false, message: 'Organization not found.' });
+
+    if (!org.onboarding) org.onboarding = { isCompleted: false, step: 1 };
+
+    if (step !== undefined) org.onboarding.step = Number(step);
+    if (isCompleted !== undefined) org.onboarding.isCompleted = Boolean(isCompleted);
+
+    await org.save();
+
+    res.json({
+      success: true,
+      message: 'Onboarding step updated',
+      data: org.onboarding,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

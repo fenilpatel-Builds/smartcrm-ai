@@ -24,7 +24,7 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['renewal', 'overdue_payment', 'churn_alert', 'task_reminder', 'lead_activity', 'system'],
+      enum: ['renewal', 'overdue_payment', 'churn_alert', 'task_reminder', 'lead_activity', 'system', 'info'],
       default: 'system',
       index: true,
     },

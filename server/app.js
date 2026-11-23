@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import mongoose from 'mongoose';
 import apiRoutes from './routes/index.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { apiLimiter } from './middleware/rateLimiter.js';
@@ -10,6 +11,14 @@ import { apiLimiter } from './middleware/rateLimiter.js';
 dotenv.config();
 
 const app = express();
+
+// Request Correlation ID Middleware
+app.use((req, res, next) => {
+  const reqId = req.headers['x-request-id'] || `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  req.id = reqId;
+  res.setHeader('x-request-id', reqId);
+  next();
+});
 
 // Security HTTP headers
 app.use(
@@ -47,6 +56,38 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
+
+// Top-level Health & Readiness Probes (for load balancers & container orchestrators)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    service: 'SmartCRM API',
+    version: '1.0.0',
+    requestId: req.id,
+  });
+});
+
+app.get('/ready', (req, res) => {
+  const isDbReady = mongoose.connection.readyState === 1;
+  if (!isDbReady) {
+    return res.status(503).json({
+      status: 'unready',
+      database: 'disconnected',
+      timestamp: new Date().toISOString(),
+      requestId: req.id,
+    });
+  }
+  return res.json({
+    status: 'ready',
+    database: 'connected',
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    requestId: req.id,
+  });
+});
 
 // Rate Limiting
 app.use('/api', apiLimiter);

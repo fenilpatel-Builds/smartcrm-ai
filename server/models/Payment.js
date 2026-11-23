@@ -58,6 +58,44 @@ const paymentSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    gatewayProvider: {
+      type: String,
+      enum: ['razorpay', 'stripe', 'sandbox', 'manual'],
+      default: 'manual',
+    },
+    gatewayOrderId: {
+      type: String,
+      default: '',
+      index: true,
+    },
+    gatewayPaymentId: {
+      type: String,
+      default: '',
+      index: true,
+    },
+    gatewaySignature: {
+      type: String,
+      default: '',
+    },
+    idempotencyKey: {
+      type: String,
+      index: true,
+    },
+    refundId: {
+      type: String,
+      default: '',
+    },
+    refundAmount: {
+      type: Number,
+      default: 0,
+    },
+    refundReason: {
+      type: String,
+      default: '',
+    },
+    refundedAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,

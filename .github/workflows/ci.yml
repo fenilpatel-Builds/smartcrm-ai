@@ -1,0 +1,74 @@
+name: SmartCRM AI - Production CI/CD Pipeline
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  server-verification:
+    name: Backend API & Verification Suite
+    runs-on: ubuntu-latest
+
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Root Dependencies
+        run: npm ci || npm install
+
+      - name: Install Server Dependencies
+        run: npm ci || npm install
+        working-directory: ./server
+
+      - name: Run Backend Product Verification Suite
+        run: npm run test:server
+        env:
+          NODE_ENV: test
+          MONGODB_URI: mongodb://localhost:27017/smartcrm_ci
+          JWT_SECRET: ci_secret_jwt_token_for_smartcrm_2026
+          ENCRYPTION_KEY: ci_super_secret_encryption_key_32b_len!!
+          RAZORPAY_KEY_ID: rzp_test_mock_123
+          RAZORPAY_KEY_SECRET: rzp_secret_mock_456
+
+  client-build:
+    name: Frontend Production Build & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Client Dependencies
+        run: npm ci || npm install
+        working-directory: ./client
+
+      - name: Build Vite Production Bundle
+        run: npm run build
+        working-directory: ./client
+        env:
+          VITE_API_URL: /api/v1

@@ -484,13 +484,75 @@ export const InvoiceList = () => {
             <option value="cash">Check / Cash</option>
           </Select>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={() => setIsRecordPaymentModalOpen(false)}>
-              Cancel
+          <div className="flex justify-between items-center pt-4">
+            <Button
+              type="button"
+              variant="primary"
+              onClick={async () => {
+                try {
+                  const res = await api.post('/payments/create-order', {
+                    invoiceId: selectedInvoice._id,
+                    customerId: selectedInvoice.customerId?._id,
+                    amount: Number(paymentAmount) || selectedInvoice.balanceDue,
+                  });
+                  if (res.data.success) {
+                    const order = res.data.data;
+                    if (order.provider === 'razorpay' && window.Razorpay) {
+                      const rzp = new window.Razorpay({
+                        key: order.keyId,
+                        amount: Math.round(order.amount * 100),
+                        currency: order.currency,
+                        order_id: order.orderId,
+                        name: 'SmartCRM Payment',
+                        description: `Payment for Invoice ${selectedInvoice.invoiceNumber}`,
+                        handler: async (response) => {
+                          await api.post('/payments/verify', {
+                            invoiceId: selectedInvoice._id,
+                            customerId: selectedInvoice.customerId?._id,
+                            amount: order.amount,
+                            orderId: response.razorpay_order_id,
+                            paymentId: response.razorpay_payment_id,
+                            signature: response.razorpay_signature,
+                          });
+                          toast.success('Payment verified and invoice settled!');
+                          setIsRecordPaymentModalOpen(false);
+                          fetchInvoices(pagination.page);
+                        },
+                      });
+                      rzp.open();
+                    } else {
+                      // Sandbox / test gateway execution
+                      const mockPaymentId = `pay_sb_${Date.now()}`;
+                      await api.post('/payments/verify', {
+                        invoiceId: selectedInvoice._id,
+                        customerId: selectedInvoice.customerId?._id,
+                        amount: order.amount,
+                        orderId: order.orderId,
+                        paymentId: mockPaymentId,
+                        signature: 'sandbox_verified_signature',
+                      });
+                      toast.success(`Online gateway payment verified! Invoice ${selectedInvoice.invoiceNumber} settled.`);
+                      setIsRecordPaymentModalOpen(false);
+                      fetchInvoices(pagination.page);
+                    }
+                  }
+                } catch (err) {
+                  toast.error(err.response?.data?.message || 'Payment initiation failed.');
+                }
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              Pay via Gateway (Razorpay/Online)
             </Button>
-            <Button type="submit" variant="primary">
-              Apply Payment
-            </Button>
+
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsRecordPaymentModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="outline">
+                Record Offline Payment
+              </Button>
+            </div>
           </div>
         </form>
       </Modal>

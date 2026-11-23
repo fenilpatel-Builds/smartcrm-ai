@@ -161,20 +161,21 @@ export const PaymentList = () => {
                 <th className="py-3 px-4">Method</th>
                 <th className="py-3 px-4">Date</th>
                 <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 [1, 2, 3, 4, 5].map((i) => (
                   <tr key={i} className="animate-pulse">
-                    <td colSpan={6} className="p-4">
+                    <td colSpan={7} className="p-4">
                       <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded-md" />
                     </td>
                   </tr>
                 ))
               ) : payments.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400">
+                  <td colSpan={7} className="p-8 text-center text-slate-400">
                     No transactions found.
                   </td>
                 </tr>
@@ -209,11 +210,33 @@ export const PaymentList = () => {
                             ? 'success'
                             : p.status === 'pending'
                             ? 'warning'
+                            : p.status === 'refunded'
+                            ? 'default'
                             : 'danger'
                         }
                       >
                         {p.status}
                       </Badge>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      {p.status === 'paid' && (
+                        <button
+                          onClick={async () => {
+                            if (window.confirm(`Issue refund of $${p.amount.toFixed(2)} for ${p.transactionReference}?`)) {
+                              try {
+                                await api.post(`/payments/${p._id}/refund`, { reason: 'Customer requested refund' });
+                                toast.success('Payment refunded successfully');
+                                fetchPayments(pagination.page);
+                              } catch (e) {
+                                toast.error(e.response?.data?.message || 'Failed to refund payment');
+                              }
+                            }
+                          }}
+                          className="text-[11px] text-rose-600 hover:text-rose-800 font-semibold px-2 py-1 rounded bg-rose-50 dark:bg-rose-950/40"
+                        >
+                          Refund
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

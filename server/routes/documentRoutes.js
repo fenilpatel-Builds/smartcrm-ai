@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { enforceTenant } from '../middleware/tenantMiddleware.js';
 import { enforceWritePermission } from '../middleware/roleMiddleware.js';
+import { enforcePlanLimit } from '../middleware/planLimitMiddleware.js';
 import * as documentController from '../controllers/documentController.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -49,7 +50,7 @@ router.use(authenticate, enforceTenant, enforceWritePermission);
 
 router.get('/metrics', documentController.getDocumentMetrics);
 router.get('/', documentController.getDocuments);
-router.post('/upload', upload.single('file'), documentController.uploadDocument);
+router.post('/upload', enforcePlanLimit('storage'), upload.single('file'), documentController.uploadDocument);
 router.get('/:id/download', documentController.downloadDocument);
 router.delete('/:id', documentController.deleteDocument);
 

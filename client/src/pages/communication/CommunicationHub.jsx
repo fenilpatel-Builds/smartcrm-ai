@@ -11,12 +11,17 @@ import {
   Filter,
   CheckCircle2,
   Clock,
+  Send,
+  Eye,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import api from '../../services/api';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { Badge } from '../../components/ui/Badge';
+import { Input, Select } from '../../components/ui/Input';
 import { toast } from 'sonner';
 
 const TYPE_ICONS = {
@@ -36,18 +41,36 @@ const TYPE_COLORS = {
 };
 
 export const CommunicationHub = () => {
+  const [activeTab, setActiveTab] = useState('emails'); // 'emails' | 'activities'
+
+  // Activities state
   const [logs, setLogs] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState('all');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const [formData, setFormData] = useState({
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+  const [activityForm, setActivityForm] = useState({
     customerId: '',
     interactionType: 'email',
     subject: '',
     description: '',
   });
+
+  // Emails & Outbox state
+  const [emailLogs, setEmailLogs] = useState([]);
+  const [loadingEmails, setLoadingEmails] = useState(true);
+  const [emailStatusFilter, setEmailStatusFilter] = useState('all');
+  const [isComposeModalOpen, setIsComposeModalOpen] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [composeForm, setComposeForm] = useState({
+    to: '',
+    recipientName: '',
+    subject: '',
+    message: '',
+    templateType: 'custom',
+  });
+  const [previewContent, setPreviewContent] = useState(null);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
   const fetchLogs = async () => {
     try {
@@ -69,27 +92,50 @@ export const CommunicationHub = () => {
     }
   };
 
-  useEffect(() => {
-    fetchLogs();
-  }, [typeFilter]);
+  const fetchEmailLogs = async () => {
+    try {
+      setLoadingEmails(true);
+      const params = {};
+      if (emailStatusFilter !== 'all') params.status = emailStatusFilter;
+      const res = await api.get('/communications/logs', { params });
+      if (res.data.success) {
+        setEmailLogs(res.data.data || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingEmails(false);
+    }
+  };
 
-  const handleCreateLog = async (e) => {
+  useEffect(() => {
+    if (activeTab === 'activities') {
+      fetchLogs();
+    } else {
+      fetchEmailLogs();
+      if (customers.length === 0) {
+        api.get('/customers?limit=100').then((r) => setCustomers(r.data.data || []));
+      }
+    }
+  }, [activeTab, typeFilter, emailStatusFilter]);
+
+  const handleCreateActivity = async (e) => {
     e.preventDefault();
-    if (!formData.customerId || !formData.subject || !formData.description) {
+    if (!activityForm.customerId || !activityForm.subject || !activityForm.description) {
       toast.error('Customer, subject, and description are required.');
       return;
     }
 
     try {
-      await api.post(`/customers/${formData.customerId}/interactions`, {
-        interactionType: formData.interactionType,
-        subject: formData.subject,
-        description: formData.description,
+      await api.post(`/customers/${activityForm.customerId}/interactions`, {
+        interactionType: activityForm.interactionType,
+        subject: activityForm.subject,
+        description: activityForm.description,
       });
 
       toast.success('Activity logged successfully');
-      setIsModalOpen(false);
-      setFormData({
+      setIsActivityModalOpen(false);
+      setActivityForm({
         customerId: '',
         interactionType: 'email',
         subject: '',
@@ -101,184 +147,469 @@ export const CommunicationHub = () => {
     }
   };
 
+  const handleSendEmail = async (e) => {
+    e.preventDefault();
+    if (!composeForm.to || !composeForm.subject) {
+      toast.error('Recipient email and subject are required.');
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const res = await api.post('/communications/send', {
+        to: composeForm.to,
+        recipientName: composeForm.recipientName,
+        subject: composeForm.subject,
+        text: composeForm.message,
+        templateType: composeForm.templateType,
+        templateData: {
+          customerName: composeForm.recipientName,
+          message: composeForm.message,
+        },
+      });
+
+      if (res.data.success) {
+        toast.success(res.data.message || 'Email dispatched successfully!');
+        setIsComposeModalOpen(false);
+        setComposeForm({
+          to: '',
+          recipientName: '',
+          subject: '',
+          message: '',
+          templateType: 'custom',
+        });
+        fetchEmailLogs();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to send email.');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  const handlePreviewTemplate = async () => {
+    try {
+      const res = await api.post('/communications/preview', {
+        templateType: composeForm.templateType,
+        templateData: {
+          customerName: composeForm.recipientName || 'Valued Client',
+          message: composeForm.message || 'Thank you for partnering with our team.',
+          invoiceNumber: 'INV-2026-088',
+          amount: '$1,500.00',
+          dueDate: '2026-12-15',
+          planName: 'Enterprise SaaS',
+          renewalDate: '2026-12-30',
+        },
+      });
+      if (res.data.success) {
+        setPreviewContent(res.data.data);
+        setIsPreviewModalOpen(true);
+      }
+    } catch (err) {
+      toast.error('Failed to generate template preview.');
+    }
+  };
+
+  const handleSelectCustomerForEmail = (custId) => {
+    const cust = customers.find((c) => c._id === custId);
+    if (cust) {
+      setComposeForm((prev) => ({
+        ...prev,
+        to: cust.email || '',
+        recipientName: cust.name || '',
+      }));
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
-            <MessageSquare className="w-7 h-7 text-teal-600" />
-            Communication & Touchpoints Hub
+          <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
+            Communication & Outbound Hub
           </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Omnichannel customer communication logs, correspondence history, and rep interactions.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Dispatch tracked customer emails, preview responsive templates, and maintain omnichannel activity logs.
           </p>
         </div>
-        <Button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white"
+        <div className="flex gap-2">
+          {activeTab === 'emails' ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setIsComposeModalOpen(true)}
+              className="flex items-center gap-2"
+            >
+              <Send className="w-4 h-4" />
+              Compose & Send Email
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setIsActivityModalOpen(true)}
+              className="flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Log Interaction
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Primary Sub-Tabs */}
+      <div className="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 text-xs font-bold">
+        <button
+          onClick={() => setActiveTab('emails')}
+          className={`px-4 py-2 rounded-xl transition ${
+            activeTab === 'emails'
+              ? 'bg-teal-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
         >
-          <Plus className="w-4 h-4" />
-          Log Communication
-        </Button>
+          Tracked Email Outbox ({emailLogs.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('activities')}
+          className={`px-4 py-2 rounded-xl transition ${
+            activeTab === 'activities'
+              ? 'bg-teal-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          CRM Interaction Feed ({logs.length})
+        </button>
       </div>
 
-      {/* Filter Bar */}
-      <Card className="p-4 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-wrap gap-2 items-center">
-        {['all', 'email', 'call', 'meeting', 'note', 'status_change'].map((t) => (
-          <button
-            key={t}
-            onClick={() => setTypeFilter(t)}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-colors ${
-              typeFilter === t
-                ? 'bg-teal-600 text-white'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
-            }`}
-          >
-            {t.replace('_', ' ')}
-          </button>
-        ))}
-      </Card>
-
-      {/* Activity Timeline Feed */}
-      <div className="space-y-4">
-        {loading ? (
-          <div className="text-center py-12 text-slate-400">
-            <div className="w-7 h-7 border-2 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-            Loading communication logs...
+      {/* 1. EMAILS OUTBOX TAB */}
+      {activeTab === 'emails' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div className="flex gap-2">
+              {['all', 'sent', 'delivered', 'failed'].map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setEmailStatusFilter(st)}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg capitalize transition ${
+                    emailStatusFilter === st
+                      ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+                >
+                  {st}
+                </button>
+              ))}
+            </div>
+            <Button size="sm" variant="outline" onClick={fetchEmailLogs} className="flex items-center gap-1.5">
+              <RefreshCw className="w-3.5 h-3.5" />
+              Refresh
+            </Button>
           </div>
-        ) : logs.length === 0 ? (
-          <Card className="p-12 text-center text-slate-400 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-            No interactions logged for this filter.
+
+          <Card>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-600 dark:text-slate-400">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 uppercase font-bold text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                  <tr>
+                    <th className="py-3 px-4">Recipient</th>
+                    <th className="py-3 px-4">Subject</th>
+                    <th className="py-3 px-4">Template Type</th>
+                    <th className="py-3 px-4">Delivery Status</th>
+                    <th className="py-3 px-4">Timestamp</th>
+                    <th className="py-3 px-4 text-right">Message ID</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {loadingEmails ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400">Loading delivery records...</td>
+                    </tr>
+                  ) : emailLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400">No outgoing emails found matching current filter.</td>
+                    </tr>
+                  ) : (
+                    emailLogs.map((e) => (
+                      <tr key={e._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
+                        <td className="py-3.5 px-4 font-bold text-slate-900 dark:text-slate-100">
+                          {e.recipient?.name || e.recipient?.email}
+                          <span className="block text-[11px] font-normal text-slate-400">{e.recipient?.email}</span>
+                        </td>
+                        <td className="py-3.5 px-4 font-medium text-slate-800 dark:text-slate-200">
+                          {e.subject}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span className="capitalize text-slate-600 dark:text-slate-300 font-medium">
+                            {e.templateType?.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <Badge
+                            variant={
+                              e.status === 'delivered' || e.status === 'sent'
+                                ? 'success'
+                                : e.status === 'failed' || e.status === 'bounced'
+                                ? 'danger'
+                                : 'default'
+                            }
+                          >
+                            {e.status?.toUpperCase()}
+                          </Badge>
+                        </td>
+                        <td className="py-3.5 px-4 text-slate-500">
+                          {new Date(e.sentAt).toLocaleString()}
+                        </td>
+                        <td className="py-3.5 px-4 text-right font-mono text-[10px] text-slate-400">
+                          {e.providerMessageId ? e.providerMessageId.slice(0, 16) + '...' : 'N/A'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </Card>
-        ) : (
-          logs.map((log) => {
-            const Icon = TYPE_ICONS[log.interactionType] || FileText;
-            const colorClass = TYPE_COLORS[log.interactionType] || 'bg-slate-100 text-slate-700';
+        </div>
+      )}
 
-            return (
-              <Card
-                key={log._id}
-                className="p-5 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+      {/* 2. CRM ACTIVITY FEED TAB */}
+      {activeTab === 'activities' && (
+        <div className="space-y-4">
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {['all', 'email', 'call', 'meeting', 'note'].map((tp) => (
+              <button
+                key={tp}
+                onClick={() => setTypeFilter(tp)}
+                className={`px-3 py-1 text-xs font-semibold rounded-lg capitalize transition ${
+                  typeFilter === tp
+                    ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                }`}
               >
-                <div className="flex items-start gap-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${colorClass}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
+                {tp}
+              </button>
+            ))}
+          </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
-                      <h3 className="font-bold text-slate-900 dark:text-white text-base">
-                        {log.subject}
-                      </h3>
-                      <span className="text-xs text-slate-400 flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        {new Date(log.interactionDate || log.createdAt).toLocaleString()}
-                      </span>
+          <Card>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {loading ? (
+                <div className="p-8 text-center text-slate-400">Loading interactions...</div>
+              ) : logs.length === 0 ? (
+                <div className="p-8 text-center text-slate-400">No interaction records found.</div>
+              ) : (
+                logs.map((log) => {
+                  const Icon = TYPE_ICONS[log.interactionType] || FileText;
+                  const colorClass = TYPE_COLORS[log.interactionType] || 'bg-slate-100 text-slate-700';
+
+                  return (
+                    <div key={log._id} className="p-4 flex items-start gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition">
+                      <div className={`p-2 rounded-xl shrink-0 ${colorClass}`}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                            {log.subject}
+                          </h3>
+                          <span className="text-[11px] text-slate-400 shrink-0">
+                            {new Date(log.interactionDate).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 line-clamp-2">
+                          {log.description}
+                        </p>
+                        <div className="flex items-center gap-4 mt-2 text-[11px] text-slate-400">
+                          <span>Customer: <strong className="text-slate-700 dark:text-slate-300">{log.customerId?.name || 'General'}</strong></span>
+                          <span>Logged by: <strong className="text-slate-700 dark:text-slate-300">{log.userId?.name || 'Team Rep'}</strong></span>
+                        </div>
+                      </div>
                     </div>
+                  );
+                })
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
 
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs font-semibold text-teal-600 dark:text-teal-400">
-                        {log.customerId?.name || 'Customer Account'}
-                      </span>
-                      {log.customerId?.company && (
-                        <span className="text-xs text-slate-400">
-                          • {log.customerId.company}
-                        </span>
-                      )}
-                      <span className="text-xs text-slate-400">
-                        • Logged by {log.userId?.name || 'User'}
-                      </span>
-                    </div>
-
-                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                      {log.description}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            );
-          })
-        )}
-      </div>
-
-      {/* Modal to Log Activity */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title="Log Customer Communication"
-      >
-        <form onSubmit={handleCreateLog} className="space-y-4">
+      {/* Compose & Send Email Modal */}
+      <Modal isOpen={isComposeModalOpen} onClose={() => setIsComposeModalOpen(false)} title="Compose Tracked Email">
+        <form onSubmit={handleSendEmail} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Customer Account *
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Select Existing Customer (Optional autofill)
             </label>
             <select
-              required
-              value={formData.customerId}
-              onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
-              className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 dark:text-white"
+              onChange={(e) => handleSelectCustomerForEmail(e.target.value)}
+              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
             >
-              <option value="">Select a Customer</option>
+              <option value="">-- Choose Customer --</option>
               {customers.map((c) => (
                 <option key={c._id} value={c._id}>
-                  {c.name} {c.company ? `(${c.company})` : ''}
+                  {c.name} ({c.email})
                 </option>
               ))}
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Channel / Type *
-              </label>
-              <select
-                value={formData.interactionType}
-                onChange={(e) => setFormData({ ...formData, interactionType: e.target.value })}
-                className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 dark:text-white"
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Recipient Name"
+              value={composeForm.recipientName}
+              onChange={(e) => setComposeForm({ ...composeForm, recipientName: e.target.value })}
+              placeholder="e.g. Rachel Green"
+            />
+            <Input
+              label="Recipient Email Address *"
+              type="email"
+              required
+              value={composeForm.to}
+              onChange={(e) => setComposeForm({ ...composeForm, to: e.target.value })}
+              placeholder="rachel@company.com"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Select
+              label="Email Template Type"
+              value={composeForm.templateType}
+              onChange={(e) => setComposeForm({ ...composeForm, templateType: e.target.value })}
+            >
+              <option value="custom">Custom Message (Plain / HTML)</option>
+              <option value="customer_onboarding">Customer Onboarding / Welcome</option>
+              <option value="invoice_notice">Invoice Notification & Payment Link</option>
+              <option value="renewal_reminder">Subscription Renewal Reminder</option>
+              <option value="payment_failed">Payment Failed Urgent Notice</option>
+              <option value="ticket_update">Support Ticket Resolution Notice</option>
+            </Select>
+
+            <div className="flex items-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full flex items-center justify-center gap-1.5"
+                onClick={handlePreviewTemplate}
               >
-                <option value="email">Email</option>
-                <option value="call">Phone Call</option>
-                <option value="meeting">Meeting / Demo</option>
-                <option value="note">Internal Note</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                Subject *
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.subject}
-                onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 dark:text-white"
-                placeholder="e.g. Q4 Contract Negotiation Call"
-              />
+                <Eye className="w-3.5 h-3.5" />
+                Live Preview
+              </Button>
             </div>
           </div>
 
+          <Input
+            label="Email Subject Line *"
+            required
+            value={composeForm.subject}
+            onChange={(e) => setComposeForm({ ...composeForm, subject: e.target.value })}
+            placeholder="e.g. Your Monthly Invoice from Acme Corp"
+          />
+
           <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Communication Details & Notes *
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Message Body / Notes
             </label>
             <textarea
-              required
-              rows="4"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-3 py-2 text-sm bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 dark:text-white"
-              placeholder="What was discussed, objections raised, agreed action items..."
+              rows={4}
+              value={composeForm.message}
+              onChange={(e) => setComposeForm({ ...composeForm, message: e.target.value })}
+              className="w-full p-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-teal-500"
+              placeholder="Type message content or custom instructions..."
             />
           </div>
 
           <div className="flex justify-end gap-2 pt-3">
-            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setIsComposeModalOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" className="bg-teal-600 hover:bg-teal-700 text-white">
-              Save Log
+            <Button type="submit" variant="primary" loading={sendingEmail} className="flex items-center gap-1.5">
+              <Send className="w-3.5 h-3.5" />
+              Dispatch Email
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Template Preview Modal */}
+      <Modal isOpen={isPreviewModalOpen} onClose={() => setIsPreviewModalOpen(false)} title={`Preview: ${previewContent?.subject || 'Template'}`}>
+        <div className="space-y-4">
+          <div className="text-xs text-slate-500 border-b pb-2">
+            <strong>Subject:</strong> {previewContent?.subject}
+          </div>
+          <div
+            className="border rounded-xl p-4 bg-white max-h-96 overflow-y-auto"
+            dangerouslySetInnerHTML={{ __html: previewContent?.html || '<p>No preview generated</p>' }}
+          />
+          <div className="flex justify-end">
+            <Button size="sm" variant="outline" onClick={() => setIsPreviewModalOpen(false)}>
+              Close Preview
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Log Interaction Modal */}
+      <Modal isOpen={isActivityModalOpen} onClose={() => setIsActivityModalOpen(false)} title="Log CRM Interaction">
+        <form onSubmit={handleCreateActivity} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Select Customer *
+            </label>
+            <select
+              required
+              value={activityForm.customerId}
+              onChange={(e) => setActivityForm({ ...activityForm, customerId: e.target.value })}
+              className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+            >
+              <option value="">-- Choose Customer --</option>
+              {customers.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.name} ({c.company || 'Individual'})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <Select
+            label="Activity Type"
+            value={activityForm.interactionType}
+            onChange={(e) => setActivityForm({ ...activityForm, interactionType: e.target.value })}
+          >
+            <option value="email">Email</option>
+            <option value="call">Phone Call</option>
+            <option value="meeting">Meeting</option>
+            <option value="note">Internal Note</option>
+          </Select>
+
+          <Input
+            label="Subject *"
+            required
+            value={activityForm.subject}
+            onChange={(e) => setActivityForm({ ...activityForm, subject: e.target.value })}
+            placeholder="e.g. Q4 Contract Discussion Call"
+          />
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Summary / Meeting Notes *
+            </label>
+            <textarea
+              rows={4}
+              required
+              value={activityForm.description}
+              onChange={(e) => setActivityForm({ ...activityForm, description: e.target.value })}
+              className="w-full p-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+              placeholder="Record details of conversation, next steps, commitments..."
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3">
+            <Button type="button" variant="outline" onClick={() => setIsActivityModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary">
+              Save Activity
             </Button>
           </div>
         </form>
@@ -286,5 +617,3 @@ export const CommunicationHub = () => {
     </div>
   );
 };
-
-export default CommunicationHub;

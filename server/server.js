@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import app from './app.js';
 import { connectDB } from './config/db.js';
 import { initBackgroundJobs } from './jobs/cronJobs.js';
+import { startJobWorker, stopJobWorker } from './services/jobs/jobQueueService.js';
 import { User } from './models/User.js';
 import { seedDatabase } from './scripts/seed.js';
 
@@ -21,6 +22,7 @@ const startServer = async () => {
     }
 
     initBackgroundJobs();
+    startJobWorker(5000);
 
     const server = app.listen(PORT, () => {
       console.log(`====================================================`);
@@ -32,6 +34,7 @@ const startServer = async () => {
 
     const shutdown = () => {
       console.log('\n[Server] Graceful shutdown initiated...');
+      stopJobWorker();
       server.close(() => {
         console.log('[Server] HTTP server closed.');
         process.exit(0);

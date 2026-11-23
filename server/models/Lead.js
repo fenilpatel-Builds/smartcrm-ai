@@ -29,7 +29,7 @@ const leadSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ['website', 'referral', 'cold_outreach', 'inbound', 'advertising', 'partner', 'other'],
+      enum: ['website', 'web_form', 'referral', 'cold_outreach', 'inbound', 'advertising', 'partner', 'import', 'linkedin', 'event', 'other'],
       default: 'website',
     },
     stage: {
