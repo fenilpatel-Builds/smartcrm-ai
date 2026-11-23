@@ -11,6 +11,9 @@ router.use(authenticate, enforceTenant);
 
 router.post('/', customerController.createCustomer);
 router.get('/', customerController.getCustomers);
+router.get('/export/csv', customerController.exportCustomersCsv);
+router.get('/duplicates', customerController.detectDuplicates);
+router.get('/segments', customerController.getCustomerSegments);
 router.post('/bulk', customerController.bulkCustomerActions);
 router.post('/import', customerController.importCustomers);
 

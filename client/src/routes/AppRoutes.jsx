@@ -7,14 +7,24 @@ import { Register, ForgotPassword } from '../pages/auth/Register';
 import { Dashboard } from '../pages/dashboard/Dashboard';
 import { CustomerList } from '../pages/customers/CustomerList';
 import { CustomerDetail } from '../pages/customers/CustomerDetail';
+import { ContactList } from '../pages/contacts/ContactList';
+import { CompanyList } from '../pages/companies/CompanyList';
 import { LeadPipeline } from '../pages/leads/LeadPipeline';
+import { DealPipeline } from '../pages/deals/DealPipeline';
+import { CalendarView } from '../pages/calendar/CalendarView';
+import { CommunicationHub } from '../pages/communication/CommunicationHub';
+import { TicketList } from '../pages/tickets/TicketList';
+import { DocumentVault } from '../pages/documents/DocumentVault';
+import { AutomationCenter } from '../pages/automation/AutomationCenter';
 import { SubscriptionList } from '../pages/subscriptions/SubscriptionList';
 import { PlanList } from '../pages/plans/PlanList';
 import { PaymentList } from '../pages/payments/PaymentList';
 import { InvoiceList } from '../pages/invoices/InvoiceList';
 import { TaskList } from '../pages/tasks/TaskList';
 import { AIInsightsCenter } from '../pages/ai/AIInsightsCenter';
+import { AICRMAssistant } from '../pages/ai/AICRMAssistant';
 import { Reports } from '../pages/analytics/Reports';
+import { AuditLogs } from '../pages/audit/AuditLogs';
 import { Settings } from '../pages/settings/Settings';
 
 const ProtectedRoute = ({ children }) => {
@@ -55,14 +65,24 @@ export const AppRoutes = () => {
         <Route index element={<Dashboard />} />
         <Route path="customers" element={<CustomerList />} />
         <Route path="customers/:id" element={<CustomerDetail />} />
+        <Route path="contacts" element={<ContactList />} />
+        <Route path="companies" element={<CompanyList />} />
         <Route path="leads" element={<LeadPipeline />} />
+        <Route path="deals" element={<DealPipeline />} />
+        <Route path="calendar" element={<CalendarView />} />
+        <Route path="communication" element={<CommunicationHub />} />
+        <Route path="tickets" element={<TicketList />} />
+        <Route path="documents" element={<DocumentVault />} />
+        <Route path="automation" element={<AutomationCenter />} />
         <Route path="subscriptions" element={<SubscriptionList />} />
         <Route path="plans" element={<PlanList />} />
         <Route path="payments" element={<PaymentList />} />
         <Route path="invoices" element={<InvoiceList />} />
         <Route path="tasks" element={<TaskList />} />
         <Route path="ai-insights" element={<AIInsightsCenter />} />
+        <Route path="ai-assistant" element={<AICRMAssistant />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="audit-logs" element={<AuditLogs />} />
         <Route path="settings" element={<Settings />} />
         <Route path="settings/team" element={<Settings />} />
       </Route>

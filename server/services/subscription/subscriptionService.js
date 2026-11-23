@@ -321,3 +321,58 @@ export const upgradeSubscription = async ({
 
   return subscription;
 };
+
+/**
+ * Renews an active or expired subscription for another billing cycle
+ */
+export const renewSubscription = async ({ organizationId, subscriptionId, userId }) => {
+  const subscription = await Subscription.findOne({ _id: subscriptionId, organizationId });
+  if (!subscription) throw new Error('Subscription not found.');
+
+  const newStart = new Date(subscription.currentPeriodEnd || Date.now());
+  const newEnd = new Date(newStart);
+
+  switch (subscription.billingFrequency) {
+    case 'monthly':
+      newEnd.setMonth(newEnd.getMonth() + 1);
+      break;
+    case 'quarterly':
+      newEnd.setMonth(newEnd.getMonth() + 3);
+      break;
+    case 'semi_annual':
+      newEnd.setMonth(newEnd.getMonth() + 6);
+      break;
+    case 'annual':
+      newEnd.setFullYear(newEnd.getFullYear() + 1);
+      break;
+    default:
+      newEnd.setMonth(newEnd.getMonth() + 1);
+  }
+
+  subscription.currentPeriodStart = newStart;
+  subscription.currentPeriodEnd = newEnd;
+  subscription.nextRenewalDate = newEnd;
+  subscription.status = 'active';
+  subscription.paymentStatus = 'paid';
+
+  subscription.history.push({
+    action: 'renewed',
+    fromStatus: subscription.status,
+    toStatus: 'active',
+    reason: `Subscription renewed until ${newEnd.toISOString().split('T')[0]}`,
+    changedAt: new Date(),
+  });
+
+  await subscription.save();
+
+  await logAudit({
+    organizationId,
+    userId,
+    action: 'RENEW_SUBSCRIPTION',
+    entityType: 'Subscription',
+    entityId: subscription._id,
+    metadata: { newPeriodEnd: newEnd },
+  });
+
+  return subscription;
+};

@@ -13,16 +13,24 @@
 ## 🌟 Key Highlights & Business Capabilities
 
 - **Normalized Recurring Revenue (MRR / ARR)**: Accurately normalizes monthly, quarterly, semi-annual, and annual billing frequencies. Paused and cancelled subscriptions are never counted towards active MRR.
-- **Audited Financial Ledgers**: Strict distinction between recognized revenue, collected payments, and outstanding balances.
+- **Enterprise CRM & B2B Account Management**:
+  - **Companies & Corporate Accounts**: Manage corporate entities, employee sizes, annual revenue, and hierarchical linkages.
+  - **Contacts Directory**: Track key decision-makers and executive point-of-contacts.
+  - **Visual Sales Pipeline (Kanban)**: 6-stage sales progression (Discovery, Qualification, Proposal, Negotiation, Closed Won, Closed Lost) with live probability-weighted revenue forecasting.
+  - **Calendar & Meetings Hub**: Unified schedule for demos, renewal check-ins, negotiation calls, and follow-ups.
+  - **Communication Hub**: Centralized timeline logging phone calls, emails, demos, and notes.
+- **Service Desk & Support Operations**:
+  - **Support Tickets**: SLA-prioritized ticketing with auto-generated ticket numbers (`TCK-xxxx`), thread messaging, and status triage.
+  - **Document Vault**: Encrypted file storage engine with download streaming and categories (Contracts, MSAs, Proposals, NDAs).
+  - **Workflow Automation Center**: Event-driven rules engine with automated follow-up tasks, webhook triggers, and execution history.
 - **AI-Powered Customer Intelligence**:
-  - **Churn Risk Radar**: Transparent 0–100 heuristic scoring based on overdue payments, interaction recency, and renewal proximity, enriched with actionable retention recommendations.
-  - **Smart Upsell & Cross-Sell Engine**: Identifies qualified customers ready for higher plan tiers and calculates exact revenue expansion potential.
+  - **AI CRM Copilot**: Full-page conversational assistant querying live workspace metrics, high-risk churn accounts, and pipeline deals.
+  - **Churn Risk Radar**: Transparent 0–100 heuristic scoring based on overdue payments, interaction recency, and ticket severity.
+  - **Smart Upsell & Cross-Sell Engine**: Identifies qualified customers ready for higher plan tiers.
   - **360 Customer Summaries**: Executive snapshots synthesized across lifetime spend, interaction velocity, and payment history.
   - **Editable AI Outreach Messages**: One-click professional drafts for renewal notices, overdue reminders, and retention check-ins.
-  - **Interactive Natural Language Business Assistant**: Query live workspace statistics (e.g. *"What is our current MRR?"*, *"Which customers have overdue payments?"*) backed directly by authorized MongoDB queries.
-- **Enterprise Multi-Tenancy & RBAC**: Complete tenant isolation via `organizationId` scoping, enforcing access controls across 4 distinct user roles: Super Admin, Organization Owner, Manager, and Employee.
-- **Automated Background Jobs**: Built-in scheduled cron tasks for renewal alerts, overdue invoice notices, and task reminders with duplicate prevention.
-- **Zero-Config Instant Execution**: Automatically boots an embedded in-memory MongoDB instance with pre-seeded demo data if local MongoDB is unavailable.
+- **Audited Financial Ledgers**: Strict distinction between recognized revenue, collected payments, and outstanding balances with downloadable PDF invoices.
+- **Enterprise Multi-Tenancy & RBAC**: Strict tenant isolation across 10 enterprise user roles.
 
 ---
 

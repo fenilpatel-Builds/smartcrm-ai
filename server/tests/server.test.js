@@ -5,6 +5,11 @@ import { connectDB, closeDB } from '../config/db.js';
 import { User } from '../models/User.js';
 import { Organization } from '../models/Organization.js';
 import { Customer } from '../models/Customer.js';
+import { Company } from '../models/Company.js';
+import { Contact } from '../models/Contact.js';
+import { Deal } from '../models/Deal.js';
+import { SupportTicket } from '../models/SupportTicket.js';
+import { AutomationRule } from '../models/AutomationRule.js';
 import { Subscription } from '../models/Subscription.js';
 import { SubscriptionPlan } from '../models/SubscriptionPlan.js';
 import { calculateSubscriptionMRR, calculateSubscriptionARR } from '../services/subscription/subscriptionService.js';
@@ -53,6 +58,11 @@ describe('SmartCRM Backend Test Suite', () => {
     await Organization.deleteMany({ _id: { $in: [testOrg1._id, testOrg2._id] } });
     await User.deleteMany({ organizationId: { $in: [testOrg1._id, testOrg2._id] } });
     await Customer.deleteMany({ organizationId: { $in: [testOrg1._id, testOrg2._id] } });
+    await Company.deleteMany({ organizationId: { $in: [testOrg1._id, testOrg2._id] } });
+    await Contact.deleteMany({ organizationId: { $in: [testOrg1._id, testOrg2._id] } });
+    await Deal.deleteMany({ organizationId: { $in: [testOrg1._id, testOrg2._id] } });
+    await SupportTicket.deleteMany({ organizationId: { $in: [testOrg1._id, testOrg2._id] } });
+    await AutomationRule.deleteMany({ organizationId: { $in: [testOrg1._id, testOrg2._id] } });
     await Subscription.deleteMany({ organizationId: { $in: [testOrg1._id, testOrg2._id] } });
     await SubscriptionPlan.deleteMany({ organizationId: { $in: [testOrg1._id, testOrg2._id] } });
     await closeDB();
@@ -77,6 +87,92 @@ describe('SmartCRM Backend Test Suite', () => {
     // Query under Org 2 -> NOT found (Tenant Isolation Guaranteed)
     const foundInOrg2 = await Customer.findOne({ _id: testCustomer1._id, organizationId: testOrg2._id });
     assert.equal(foundInOrg2, null);
+  });
+
+  test('Company & Contact Isolation: Entity under Org 1 is inaccessible to Org 2', async () => {
+    const comp = await Company.create({
+      organizationId: testOrg1._id,
+      name: 'Org 1 Exclusive Corp',
+      domain: 'org1exclusive.com',
+      industry: 'Technology',
+    });
+
+    const contact = await Contact.create({
+      organizationId: testOrg1._id,
+      firstName: 'Alice',
+      lastName: 'Smith',
+      email: `alice-${Date.now()}@org1exclusive.com`,
+      companyId: comp._id,
+    });
+
+    assert.ok(comp._id);
+    assert.ok(contact._id);
+
+    const compOrg2 = await Company.findOne({ _id: comp._id, organizationId: testOrg2._id });
+    const contactOrg2 = await Contact.findOne({ _id: contact._id, organizationId: testOrg2._id });
+
+    assert.equal(compOrg2, null);
+    assert.equal(contactOrg2, null);
+  });
+
+  test('Deal Pipeline: Stage transition tracks stageHistory and probability', async () => {
+    const deal = await Deal.create({
+      organizationId: testOrg1._id,
+      title: 'Enterprise Platform Deal',
+      value: 50000,
+      stage: 'discovery',
+      probability: 10,
+      stageHistory: [{ stage: 'discovery', enteredAt: new Date() }],
+    });
+
+    assert.equal(deal.weightedValue, 5000);
+
+    // Move to Proposal
+    deal.stage = 'proposal';
+    deal.probability = 50;
+    deal.stageHistory.push({ stage: 'proposal', enteredAt: new Date() });
+    await deal.save();
+
+    const updated = await Deal.findById(deal._id);
+    assert.equal(updated.stage, 'proposal');
+    assert.equal(updated.weightedValue, 25000);
+    assert.equal(updated.stageHistory.length, 2);
+  });
+
+  test('Support Ticket: Validates ticket number and message thread', async () => {
+    const ticket = await SupportTicket.create({
+      organizationId: testOrg1._id,
+      ticketNumber: 'TCK-9999',
+      subject: 'Billing discrepancy on invoice',
+      description: 'Customer was billed twice.',
+      customerId: testCustomer1._id,
+      priority: 'urgent',
+      status: 'open',
+      messages: [
+        {
+          senderName: 'Agent Cooper',
+          content: 'Investigating billing logs.',
+        },
+      ],
+    });
+
+    assert.ok(ticket._id);
+    assert.equal(ticket.priority, 'urgent');
+    assert.equal(ticket.messages.length, 1);
+  });
+
+  test('Automation Rule: Model enforces valid triggers and action schemas', async () => {
+    const rule = await AutomationRule.create({
+      organizationId: testOrg1._id,
+      name: 'On Deal Won',
+      triggerType: 'deal_won',
+      actions: [{ actionType: 'create_task', payload: { title: 'Follow-up with customer' } }],
+      isActive: true,
+    });
+
+    assert.ok(rule._id);
+    assert.equal(rule.isActive, true);
+    assert.equal(rule.actions[0].actionType, 'create_task');
   });
 
   test('Subscription MRR and ARR normalization calculation', () => {

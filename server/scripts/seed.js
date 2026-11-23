@@ -6,6 +6,15 @@ import { Organization } from '../models/Organization.js';
 import { User } from '../models/User.js';
 import { Customer } from '../models/Customer.js';
 import { Lead } from '../models/Lead.js';
+import { Company } from '../models/Company.js';
+import { Contact } from '../models/Contact.js';
+import { Deal } from '../models/Deal.js';
+import { Pipeline } from '../models/Pipeline.js';
+import { CalendarEvent } from '../models/CalendarEvent.js';
+import { SupportTicket } from '../models/SupportTicket.js';
+import { Document } from '../models/Document.js';
+import { AutomationRule } from '../models/AutomationRule.js';
+import { AutomationExecution } from '../models/AutomationExecution.js';
 import { SubscriptionPlan } from '../models/SubscriptionPlan.js';
 import { Subscription } from '../models/Subscription.js';
 import { Payment } from '../models/Payment.js';
@@ -28,6 +37,15 @@ export const seedDatabase = async () => {
       User.deleteMany({}),
       Customer.deleteMany({}),
       Lead.deleteMany({}),
+      Company.deleteMany({}),
+      Contact.deleteMany({}),
+      Deal.deleteMany({}),
+      Pipeline.deleteMany({}),
+      CalendarEvent.deleteMany({}),
+      SupportTicket.deleteMany({}),
+      Document.deleteMany({}),
+      AutomationRule.deleteMany({}),
+      AutomationExecution.deleteMany({}),
       SubscriptionPlan.deleteMany({}),
       Subscription.deleteMany({}),
       Payment.deleteMany({}),
@@ -457,6 +475,287 @@ export const seedDatabase = async () => {
         type: 'lead_activity',
       },
     ]);
+
+    console.log('[Seed] Creating Companies...');
+    const companies = await Company.create([
+      {
+        organizationId: organization._id,
+        name: 'Acme Cloud Systems',
+        domain: 'acmecloud.com',
+        industry: 'Technology',
+        size: '201-500',
+        phone: '+1 (555) 910-1122',
+        website: 'https://acmecloud.com',
+        annualRevenue: 4500000,
+        assignedTo: manager._id,
+        notes: 'Strategic cloud infrastructure partner',
+      },
+      {
+        organizationId: organization._id,
+        name: 'Global Logistics Hub',
+        domain: 'globallogistics.io',
+        industry: 'Services',
+        size: '500+',
+        phone: '+1 (555) 880-3344',
+        website: 'https://globallogistics.io',
+        annualRevenue: 12000000,
+        assignedTo: owner._id,
+        notes: 'Multinational freight and supply chain software user',
+      },
+      {
+        organizationId: organization._id,
+        name: 'Apex Financial Corp',
+        domain: 'apexfin.com',
+        industry: 'Finance',
+        size: '51-200',
+        phone: '+1 (555) 770-5566',
+        website: 'https://apexfin.com',
+        annualRevenue: 8200000,
+        assignedTo: manager._id,
+      },
+      {
+        organizationId: organization._id,
+        name: 'BioHealth Technologies',
+        domain: 'biohealth.tech',
+        industry: 'Healthcare',
+        size: '11-50',
+        phone: '+1 (555) 660-7788',
+        website: 'https://biohealth.tech',
+        annualRevenue: 2400000,
+        assignedTo: employee._id,
+      },
+    ]);
+
+    console.log('[Seed] Creating Contacts...');
+    const contacts = await Contact.create([
+      {
+        organizationId: organization._id,
+        firstName: 'Marcus',
+        lastName: 'Vance',
+        email: 'm.vance@acmecloud.com',
+        phone: '+1 (555) 910-1123',
+        jobTitle: 'VP of Technology',
+        department: 'Engineering',
+        companyId: companies[0]._id,
+        isPrimary: true,
+        assignedTo: manager._id,
+      },
+      {
+        organizationId: organization._id,
+        firstName: 'Sarah',
+        lastName: 'Connor',
+        email: 's.connor@globallogistics.io',
+        phone: '+1 (555) 880-3345',
+        jobTitle: 'Head of Operations',
+        department: 'Operations',
+        companyId: companies[1]._id,
+        isPrimary: true,
+        assignedTo: owner._id,
+      },
+      {
+        organizationId: organization._id,
+        firstName: 'Arthur',
+        lastName: 'Dent',
+        email: 'a.dent@apexfin.com',
+        phone: '+1 (555) 770-5567',
+        jobTitle: 'Chief Financial Officer',
+        department: 'Finance',
+        companyId: companies[2]._id,
+        isPrimary: true,
+        assignedTo: manager._id,
+      },
+    ]);
+
+    console.log('[Seed] Creating Sales Pipeline & Deals...');
+    const defaultPipeline = await Pipeline.create({
+      organizationId: organization._id,
+      name: 'Core Enterprise Pipeline',
+      isDefault: true,
+    });
+
+    const deals = await Deal.create([
+      {
+        organizationId: organization._id,
+        title: 'Acme Cloud - Enterprise Multi-Year Migration',
+        value: 48000,
+        currency: 'USD',
+        pipelineId: defaultPipeline._id,
+        stage: 'negotiation',
+        probability: 75,
+        expectedCloseDate: new Date(Date.now() + 15 * 86400000),
+        companyId: companies[0]._id,
+        contactId: contacts[0]._id,
+        assignedTo: manager._id,
+        priority: 'urgent',
+        notes: 'Finalizing security review and compliance SLA.',
+      },
+      {
+        organizationId: organization._id,
+        title: 'Global Logistics - Automated Fleet Tracking Module',
+        value: 36000,
+        currency: 'USD',
+        pipelineId: defaultPipeline._id,
+        stage: 'proposal',
+        probability: 50,
+        expectedCloseDate: new Date(Date.now() + 25 * 86400000),
+        companyId: companies[1]._id,
+        contactId: contacts[1]._id,
+        assignedTo: owner._id,
+        priority: 'high',
+      },
+      {
+        organizationId: organization._id,
+        title: 'Apex Financial - Analytics Dashboard & Reporting',
+        value: 24000,
+        currency: 'USD',
+        pipelineId: defaultPipeline._id,
+        stage: 'closed_won',
+        probability: 100,
+        actualCloseDate: new Date(Date.now() - 5 * 86400000),
+        companyId: companies[2]._id,
+        contactId: contacts[2]._id,
+        assignedTo: manager._id,
+        priority: 'medium',
+      },
+      {
+        organizationId: organization._id,
+        title: 'BioHealth Tech - Starter Cloud License',
+        value: 12000,
+        currency: 'USD',
+        pipelineId: defaultPipeline._id,
+        stage: 'discovery',
+        probability: 10,
+        expectedCloseDate: new Date(Date.now() + 45 * 86400000),
+        companyId: companies[3]._id,
+        assignedTo: employee._id,
+        priority: 'low',
+      },
+    ]);
+
+    console.log('[Seed] Creating Calendar Events...');
+    await CalendarEvent.create([
+      {
+        organizationId: organization._id,
+        title: 'Acme Cloud - Executive Architecture Review',
+        description: 'Review SOC2 and HIPAA compliance requirements with Marcus Vance.',
+        eventType: 'meeting',
+        startDate: new Date(Date.now() + 24 * 3600000),
+        endDate: new Date(Date.now() + 25 * 3600000),
+        location: 'Virtual Zoom Room',
+        meetUrl: 'https://meet.google.com/crm-acme-review',
+        createdBy: manager._id,
+        status: 'scheduled',
+      },
+      {
+        organizationId: organization._id,
+        title: 'Global Logistics - Q4 Renewal Check-in Call',
+        description: 'Review contract usage, seat expansion, and discount tiers.',
+        eventType: 'renewal',
+        startDate: new Date(Date.now() + 72 * 3600000),
+        endDate: new Date(Date.now() + 73 * 3600000),
+        createdBy: owner._id,
+        status: 'scheduled',
+      },
+    ]);
+
+    console.log('[Seed] Creating Support Tickets...');
+    const firstCustomer = await Customer.findOne({ organizationId: organization._id });
+    if (firstCustomer) {
+      await SupportTicket.create([
+        {
+          organizationId: organization._id,
+          ticketNumber: 'TCK-1001',
+          subject: 'Stripe Webhook Sync Delay on Renewal Invoice',
+          description: 'Payment succeeded on payment gateway but subscription invoice took 40 minutes to reflect as paid.',
+          customerId: firstCustomer._id,
+          priority: 'urgent',
+          status: 'in_progress',
+          assignedTo: employee._id,
+          category: 'billing',
+          messages: [
+            {
+              sender: employee._id,
+              senderName: 'Marcus Chen',
+              senderType: 'agent',
+              content: 'Investigating webhook latency with our payment infrastructure team.',
+              createdAt: new Date(Date.now() - 3600000),
+            },
+          ],
+        },
+        {
+          organizationId: organization._id,
+          ticketNumber: 'TCK-1002',
+          subject: 'Request for SSO / SAML 2.0 Integration Guide',
+          description: 'Our security team requires SAML 2.0 documentation for Okta authentication setup.',
+          customerId: firstCustomer._id,
+          priority: 'medium',
+          status: 'open',
+          assignedTo: manager._id,
+          category: 'technical',
+          messages: [
+            {
+              sender: firstCustomer._id,
+              senderName: firstCustomer.name,
+              senderType: 'customer',
+              content: 'Please provide Okta SAML metadata XML file.',
+              createdAt: new Date(Date.now() - 7200000),
+            },
+          ],
+        },
+      ]);
+    }
+
+    console.log('[Seed] Creating Documents...');
+    await Document.create([
+      {
+        organizationId: organization._id,
+        title: 'Master Services Agreement (MSA) 2026',
+        fileName: 'sample-msa-2026.pdf',
+        originalName: 'MSA-Standard-v2.pdf',
+        filePath: 'server/uploads/documents/sample-msa-2026.pdf',
+        fileSize: 245000,
+        mimeType: 'application/pdf',
+        category: 'Contract',
+        uploadedBy: owner._id,
+      },
+      {
+        organizationId: organization._id,
+        title: 'Acme Cloud Systems - Enterprise Solution Proposal',
+        fileName: 'acme-cloud-proposal.pdf',
+        originalName: 'Acme-Proposal-v4.pdf',
+        filePath: 'server/uploads/documents/acme-cloud-proposal.pdf',
+        fileSize: 512000,
+        mimeType: 'application/pdf',
+        category: 'Proposal',
+        uploadedBy: manager._id,
+      },
+    ]);
+
+    console.log('[Seed] Creating Automation Rules...');
+    const rule1 = await AutomationRule.create({
+      organizationId: organization._id,
+      name: 'Auto-Task on Closed Won Deal',
+      description: 'Automatically creates customer onboarding handover task when deal reaches Closed Won stage.',
+      triggerType: 'deal_won',
+      actions: [
+        {
+          actionType: 'create_task',
+          payload: { title: 'Schedule Customer Onboarding Call' },
+        },
+      ],
+      isActive: true,
+      createdBy: manager._id,
+      executionCount: 1,
+    });
+
+    await AutomationExecution.create({
+      organizationId: organization._id,
+      ruleId: rule1._id,
+      triggerEvent: 'deal_won',
+      status: 'success',
+      logs: ['Trigger: deal_won', 'Created task: Schedule Customer Onboarding Call'],
+      executedAt: new Date(Date.now() - 86400000),
+    });
 
     console.log('===============================================================');
     console.log('✅ SEED COMPLETED SUCCESSFULLY!');

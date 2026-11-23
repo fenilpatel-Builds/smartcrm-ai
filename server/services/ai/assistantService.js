@@ -5,6 +5,8 @@ import { SubscriptionPlan } from '../../models/SubscriptionPlan.js';
 import { Invoice } from '../../models/Invoice.js';
 import { AIInsight } from '../../models/AIInsight.js';
 import { Task } from '../../models/Task.js';
+import { Deal } from '../../models/Deal.js';
+import { SupportTicket } from '../../models/SupportTicket.js';
 import { calculateSubscriptionMRR } from '../subscription/subscriptionService.js';
 import { callAI } from './aiClient.js';
 
@@ -195,6 +197,53 @@ export const queryBusinessAssistant = async ({ query, organizationId, user }) =>
         assignedTo: t.assignedTo?.name || 'Unassigned',
       }));
     }
+  }
+
+  // 7. Deals and sales pipeline inquiry
+  else if (q.includes('deal') || q.includes('pipeline') || q.includes('opportunity') || q.includes('forecast') || q.includes('closing')) {
+    category = 'deals';
+    const activeDeals = await Deal.find({
+      organizationId: orgId,
+      isDeleted: false,
+      stage: { $nin: ['closed_lost'] },
+    })
+      .populate('companyId', 'name')
+      .populate('assignedTo', 'name')
+      .sort({ value: -1 });
+
+    const totalVal = activeDeals.reduce((sum, d) => sum + (d.value || 0), 0);
+    const weightedVal = activeDeals.reduce((sum, d) => sum + Math.round(((d.value || 0) * (d.probability || 0)) / 100), 0);
+    const wonDeals = activeDeals.filter((d) => d.stage === 'closed_won');
+
+    responseText = `Your sales pipeline currently holds **${activeDeals.length}** open deals with a cumulative value of **$${totalVal.toLocaleString()}** and a probability-weighted forecast of **$${weightedVal.toLocaleString()}**. **${wonDeals.length}** deal(s) have been successfully closed won.`;
+    relatedData = activeDeals.slice(0, 5).map((d) => ({
+      title: d.title,
+      company: d.companyId?.name || 'Independent',
+      value: d.value,
+      stage: d.stage,
+      probability: d.probability,
+    }));
+  }
+
+  // 8. Support tickets inquiry
+  else if (q.includes('ticket') || q.includes('support') || q.includes('service') || q.includes('help desk') || q.includes('issue')) {
+    category = 'support';
+    const [openTickets, urgentTickets] = await Promise.all([
+      SupportTicket.find({ organizationId: orgId, status: { $in: ['open', 'in_progress', 'waiting'] } })
+        .populate('customerId', 'name company')
+        .sort({ priority: -1, createdAt: 1 })
+        .limit(10),
+      SupportTicket.countDocuments({ organizationId: orgId, priority: 'urgent', status: { $nin: ['resolved', 'closed'] } }),
+    ]);
+
+    responseText = `There are currently **${openTickets.length}** active support tickets in the service queue (**${urgentTickets} classified as Urgent SLA**). High attention is recommended to prevent response SLA breaches.`;
+    relatedData = openTickets.map((t) => ({
+      ticketNumber: t.ticketNumber,
+      subject: t.subject,
+      customer: t.customerId?.name,
+      priority: t.priority,
+      status: t.status,
+    }));
   }
 
   // Fallback for general queries

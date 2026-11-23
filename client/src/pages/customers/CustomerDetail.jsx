@@ -352,11 +352,14 @@ export const CustomerDetail = () => {
       {/* Tabs Navigation */}
       <div className="flex gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto text-xs font-bold">
         {[
-          { id: 'overview', label: '1. Overview & Account' },
+          { id: 'overview', label: '1. Overview' },
           { id: 'subscription', label: '2. Subscriptions' },
-          { id: 'timeline', label: '3. Interaction Timeline' },
-          { id: 'financial', label: '4. Financials & Invoices' },
-          { id: 'ai', label: '5. AI Intelligence Suite ⚡' },
+          { id: 'deals', label: `3. Deals (${customerData?.deals?.length || 0})` },
+          { id: 'tickets', label: `4. Support Tickets (${customerData?.tickets?.length || 0})` },
+          { id: 'documents', label: `5. Documents (${customerData?.documents?.length || 0})` },
+          { id: 'timeline', label: '6. Activity Timeline' },
+          { id: 'financial', label: '7. Financials & Invoices' },
+          { id: 'ai', label: '8. AI Intelligence Suite ⚡' },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -698,6 +701,162 @@ export const CustomerDetail = () => {
             </div>
           </Card>
         </div>
+      )}
+
+      {/* TAB 3: DEALS */}
+      {activeTab === 'deals' && (
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              Associated Deals & Opportunities
+            </h3>
+            <Link to="/deals">
+              <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white">
+                <Plus className="w-4 h-4 mr-1" /> View in Pipeline
+              </Button>
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-600 dark:text-slate-400">
+              <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="px-4 py-3">Deal Title</th>
+                  <th className="px-4 py-3">Value</th>
+                  <th className="px-4 py-3">Stage</th>
+                  <th className="px-4 py-3">Probability</th>
+                  <th className="px-4 py-3">Expected Close</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {!customerData?.deals || customerData.deals.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="text-center py-8 text-slate-400">
+                      No deals associated with this customer yet.
+                    </td>
+                  </tr>
+                ) : (
+                  customerData.deals.map((deal) => (
+                    <tr key={deal._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">
+                        {deal.title}
+                      </td>
+                      <td className="px-4 py-3 font-bold text-teal-600">
+                        ${(deal.value || 0).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge className="capitalize text-[10px]">{deal.stage?.replace('_', ' ')}</Badge>
+                      </td>
+                      <td className="px-4 py-3 font-mono">{deal.probability || 0}%</td>
+                      <td className="px-4 py-3 text-slate-400">
+                        {deal.expectedCloseDate ? new Date(deal.expectedCloseDate).toLocaleDateString() : 'TBD'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* TAB 4: SUPPORT TICKETS */}
+      {activeTab === 'tickets' && (
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              Customer Support Tickets
+            </h3>
+            <Link to="/tickets">
+              <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white">
+                <Plus className="w-4 h-4 mr-1" /> Open New Ticket
+              </Button>
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-600 dark:text-slate-400">
+              <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="px-4 py-3">Ticket #</th>
+                  <th className="px-4 py-3">Subject</th>
+                  <th className="px-4 py-3">Priority</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Logged Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {!customerData?.tickets || customerData.tickets.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="text-center py-8 text-slate-400">
+                      No support tickets logged for this account.
+                    </td>
+                  </tr>
+                ) : (
+                  customerData.tickets.map((t) => (
+                    <tr key={t._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="px-4 py-3 font-mono font-bold text-teal-600">{t.ticketNumber}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{t.subject}</td>
+                      <td className="px-4 py-3">
+                        <Badge className="capitalize text-[10px]">{t.priority}</Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge className="capitalize text-[10px]">{t.status?.replace('_', ' ')}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-slate-400">{new Date(t.createdAt).toLocaleDateString()}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* TAB 5: DOCUMENTS */}
+      {activeTab === 'documents' && (
+        <Card className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              Vault Documents & Signed Contracts
+            </h3>
+            <Link to="/documents">
+              <Button size="sm" className="bg-teal-600 hover:bg-teal-700 text-white">
+                <Plus className="w-4 h-4 mr-1" /> Document Vault
+              </Button>
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-600 dark:text-slate-400">
+              <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 uppercase border-b border-slate-200 dark:border-slate-800">
+                <tr>
+                  <th className="px-4 py-3">Title</th>
+                  <th className="px-4 py-3">Category</th>
+                  <th className="px-4 py-3">File Size</th>
+                  <th className="px-4 py-3">Uploaded Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {!customerData?.documents || customerData.documents.length === 0 ? (
+                  <tr>
+                    <td colSpan="4" className="text-center py-8 text-slate-400">
+                      No documents attached to this customer account.
+                    </td>
+                  </tr>
+                ) : (
+                  customerData.documents.map((doc) => (
+                    <tr key={doc._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{doc.title}</td>
+                      <td className="px-4 py-3">
+                        <Badge className="text-[10px]">{doc.category}</Badge>
+                      </td>
+                      <td className="px-4 py-3 font-mono">{Math.round((doc.fileSize || 0) / 1024)} KB</td>
+                      <td className="px-4 py-3 text-slate-400">{new Date(doc.createdAt).toLocaleDateString()}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
       {/* TAB 5: AI INTELLIGENCE SUITE */}

@@ -1,5 +1,7 @@
 import { Lead } from '../models/Lead.js';
 import { Customer } from '../models/Customer.js';
+import { Contact } from '../models/Contact.js';
+import { Deal } from '../models/Deal.js';
 import { InteractionLog } from '../models/InteractionLog.js';
 import { logAudit } from '../services/audit/auditService.js';
 
@@ -229,6 +231,47 @@ export const convertLeadToCustomer = async (req, res, next) => {
       await customer.save();
     }
 
+    // Create or update contact
+    const nameParts = (lead.name || '').trim().split(' ');
+    const firstName = nameParts[0] || 'Lead';
+    const lastName = nameParts.slice(1).join(' ') || 'Contact';
+
+    let contact = await Contact.findOne({
+      organizationId: req.organizationId,
+      email: lead.email,
+      isDeleted: false,
+    });
+
+    if (!contact) {
+      contact = await Contact.create({
+        organizationId: req.organizationId,
+        firstName,
+        lastName,
+        email: lead.email,
+        phone: lead.phone,
+        customerId: customer._id,
+        isPrimary: true,
+        assignedTo: lead.assignedTo || req.user._id,
+      });
+    }
+
+    // Optionally create a Deal
+    let deal = null;
+    const shouldCreateDeal = req.body.createDeal !== undefined ? req.body.createDeal : Boolean(lead.estimatedValue && lead.estimatedValue > 0);
+    if (shouldCreateDeal) {
+      deal = await Deal.create({
+        organizationId: req.organizationId,
+        title: req.body.dealTitle || `${customer.name} - Initial Deal`,
+        value: Number(req.body.dealValue || lead.estimatedValue || 5000),
+        stage: 'qualified',
+        probability: 25,
+        customerId: customer._id,
+        contactId: contact._id,
+        assignedTo: lead.assignedTo || req.user._id,
+        expectedCloseDate: new Date(Date.now() + 30 * 86400000),
+      });
+    }
+
     // Update lead
     lead.stage = 'converted';
     lead.convertedCustomerId = customer._id;
@@ -247,7 +290,7 @@ export const convertLeadToCustomer = async (req, res, next) => {
       userId: req.user._id,
       interactionType: 'status_change',
       subject: 'Lead Converted to Customer',
-      description: `Lead converted successfully by ${req.user.name}.`,
+      description: `Lead converted successfully by ${req.user.name}. Contact and Deal created.`,
     });
 
     await logAudit({
@@ -256,7 +299,7 @@ export const convertLeadToCustomer = async (req, res, next) => {
       action: 'CONVERT_LEAD',
       entityType: 'Lead',
       entityId: lead._id,
-      metadata: { customerId: customer._id, leadName: lead.name },
+      metadata: { customerId: customer._id, leadName: lead.name, dealId: deal?._id },
     });
 
     res.json({
@@ -265,6 +308,8 @@ export const convertLeadToCustomer = async (req, res, next) => {
       data: {
         lead,
         customer,
+        contact,
+        deal,
       },
     });
   } catch (error) {

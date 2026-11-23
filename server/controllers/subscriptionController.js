@@ -180,3 +180,23 @@ export const upgradeSubscription = async (req, res, next) => {
     next(error);
   }
 };
+
+export const renewSubscription = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const subscription = await subscriptionService.renewSubscription({
+      organizationId: req.organizationId,
+      subscriptionId: id,
+      userId: req.user._id,
+    });
+
+    res.json({
+      success: true,
+      message: 'Subscription renewed successfully',
+      data: subscription,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

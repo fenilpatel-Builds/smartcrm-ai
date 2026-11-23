@@ -5,6 +5,10 @@ import { Invoice } from '../models/Invoice.js';
 import { InteractionLog } from '../models/InteractionLog.js';
 import { Task } from '../models/Task.js';
 import { AIInsight } from '../models/AIInsight.js';
+import { Deal } from '../models/Deal.js';
+import { SupportTicket } from '../models/SupportTicket.js';
+import { Document } from '../models/Document.js';
+import { Contact } from '../models/Contact.js';
 import { logAudit } from '../services/audit/auditService.js';
 import { calculateSubscriptionMRR } from '../services/subscription/subscriptionService.js';
 
@@ -210,7 +214,7 @@ export const getCustomerById = async (req, res, next) => {
     }
 
     // Load full 360 profile context
-    const [subscriptions, payments, invoices, timeline, tasks, aiInsights] = await Promise.all([
+    const [subscriptions, payments, invoices, timeline, tasks, aiInsights, deals, tickets, documents, contacts] = await Promise.all([
       Subscription.find({ customerId: id, organizationId: req.organizationId })
         .populate('planId')
         .sort({ createdAt: -1 }),
@@ -223,6 +227,18 @@ export const getCustomerById = async (req, res, next) => {
         .populate('assignedTo', 'name')
         .sort({ dueDate: 1 }),
       AIInsight.find({ customerId: id, organizationId: req.organizationId }).sort({ generatedAt: -1 }),
+      Deal.find({ customerId: id, organizationId: req.organizationId, isDeleted: false })
+        .populate('assignedTo', 'name')
+        .sort({ createdAt: -1 }),
+      SupportTicket.find({ customerId: id, organizationId: req.organizationId })
+        .populate('assignedTo', 'name')
+        .sort({ createdAt: -1 }),
+      Document.find({ relatedEntityId: id, organizationId: req.organizationId, isDeleted: false })
+        .populate('uploadedBy', 'name')
+        .sort({ createdAt: -1 }),
+      Contact.find({ customerId: id, organizationId: req.organizationId, isDeleted: false })
+        .populate('assignedTo', 'name')
+        .sort({ createdAt: -1 }),
     ]);
 
     // Financial aggregation
@@ -253,6 +269,10 @@ export const getCustomerById = async (req, res, next) => {
         timeline,
         tasks,
         aiInsights,
+        deals,
+        tickets,
+        documents,
+        contacts,
       },
     });
   } catch (error) {
@@ -439,6 +459,113 @@ export const importCustomers = async (req, res, next) => {
         importedCount: inserted.length,
         skippedCount: skipped.length,
         skipped,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const exportCustomersCsv = async (req, res, next) => {
+  try {
+    const customers = await Customer.find({ organizationId: req.organizationId, isDeleted: false })
+      .populate('assignedTo', 'name email')
+      .sort('name');
+
+    const headers = ['ID', 'Name', 'Email', 'Phone', 'Company', 'Source', 'LifecycleStatus', 'AssignedTo', 'CreatedDate'];
+    const rows = customers.map((c) => [
+      `"${c._id}"`,
+      `"${(c.name || '').replace(/"/g, '""')}"`,
+      `"${(c.email || '').replace(/"/g, '""')}"`,
+      `"${(c.phone || '').replace(/"/g, '""')}"`,
+      `"${(c.company || '').replace(/"/g, '""')}"`,
+      `"${c.source || ''}"`,
+      `"${c.lifecycleStatus || ''}"`,
+      `"${c.assignedTo?.name || ''}"`,
+      `"${c.createdAt.toISOString()}"`,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="customers-export.csv"');
+    res.status(200).send(csvContent);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const detectDuplicates = async (req, res, next) => {
+  try {
+    const customers = await Customer.find({ organizationId: req.organizationId, isDeleted: false })
+      .select('name email phone company lifecycleStatus createdAt');
+
+    const emailMap = new Map();
+    const nameMap = new Map();
+    const duplicates = [];
+
+    for (const c of customers) {
+      const emailKey = c.email?.toLowerCase().trim();
+      if (emailKey) {
+        if (!emailMap.has(emailKey)) {
+          emailMap.set(emailKey, []);
+        }
+        emailMap.get(emailKey).push(c);
+      }
+
+      const nameKey = c.name?.toLowerCase().trim();
+      if (nameKey) {
+        if (!nameMap.has(nameKey)) {
+          nameMap.set(nameKey, []);
+        }
+        nameMap.get(nameKey).push(c);
+      }
+    }
+
+    const seenPair = new Set();
+
+    emailMap.forEach((list, key) => {
+      if (list.length > 1) {
+        duplicates.push({
+          type: 'email',
+          matchKey: key,
+          count: list.length,
+          records: list,
+        });
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        duplicateGroupsCount: duplicates.length,
+        duplicates,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCustomerSegments = async (req, res, next) => {
+  try {
+    const [lifecycleSegments, totalCustomers, totalChurned, totalActive] = await Promise.all([
+      Customer.aggregate([
+        { $match: { organizationId: req.organizationId, isDeleted: false } },
+        { $group: { _id: '$lifecycleStatus', count: { $sum: 1 } } },
+      ]),
+      Customer.countDocuments({ organizationId: req.organizationId, isDeleted: false }),
+      Customer.countDocuments({ organizationId: req.organizationId, lifecycleStatus: 'churned', isDeleted: false }),
+      Customer.countDocuments({ organizationId: req.organizationId, lifecycleStatus: 'customer', isDeleted: false }),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        totalCustomers,
+        totalActive,
+        totalChurned,
+        lifecycleBreakdown: lifecycleSegments.reduce((acc, cur) => ({ ...acc, [cur._id]: cur.count }), {}),
       },
     });
   } catch (error) {

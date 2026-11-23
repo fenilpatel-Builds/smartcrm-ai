@@ -16,5 +16,6 @@ router.post('/:id/pause', authorizeRoles('owner', 'manager', 'super_admin'), sub
 router.post('/:id/resume', authorizeRoles('owner', 'manager', 'super_admin'), subController.resumeSubscription);
 router.post('/:id/cancel', authorizeRoles('owner', 'manager', 'super_admin'), subController.cancelSubscription);
 router.post('/:id/upgrade', authorizeRoles('owner', 'manager', 'super_admin'), subController.upgradeSubscription);
+router.post('/:id/renew', authorizeRoles('owner', 'manager', 'super_admin'), subController.renewSubscription);
 
 export default router;
