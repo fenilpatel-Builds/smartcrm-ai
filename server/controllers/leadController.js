@@ -1,9 +1,11 @@
 import { Lead } from '../models/Lead.js';
 import { Customer } from '../models/Customer.js';
 import { Contact } from '../models/Contact.js';
+import { Company } from '../models/Company.js';
 import { Deal } from '../models/Deal.js';
 import { InteractionLog } from '../models/InteractionLog.js';
 import { logAudit } from '../services/audit/auditService.js';
+import { dispatchAutomationTrigger } from '../services/automation/automationEngineService.js';
 
 export const createLead = async (req, res, next) => {
   try {
@@ -41,6 +43,15 @@ export const createLead = async (req, res, next) => {
       entityId: lead._id,
       metadata: { name: lead.name, stage, estimatedValue },
     });
+
+    dispatchAutomationTrigger({
+      organizationId: req.organizationId,
+      triggerType: 'lead_created',
+      entityType: 'lead',
+      entityId: lead._id,
+      contextData: { name: lead.name, stage, estimatedValue },
+      userId: req.user._id,
+    }).catch(() => {});
 
     res.status(201).json({
       success: true,
@@ -231,6 +242,25 @@ export const convertLeadToCustomer = async (req, res, next) => {
       await customer.save();
     }
 
+    // Find or create company if company name specified
+    let companyRecord = null;
+    if (lead.company && lead.company.trim()) {
+      companyRecord = await Company.findOne({
+        organizationId: req.organizationId,
+        name: { $regex: new RegExp(`^${lead.company.trim()}$`, 'i') },
+        isDeleted: false,
+      });
+
+      if (!companyRecord) {
+        companyRecord = await Company.create({
+          organizationId: req.organizationId,
+          name: lead.company.trim(),
+          phone: lead.phone || '',
+          assignedTo: lead.assignedTo || req.user._id,
+        });
+      }
+    }
+
     // Create or update contact
     const nameParts = (lead.name || '').trim().split(' ');
     const firstName = nameParts[0] || 'Lead';
@@ -249,10 +279,14 @@ export const convertLeadToCustomer = async (req, res, next) => {
         lastName,
         email: lead.email,
         phone: lead.phone,
+        companyId: companyRecord?._id || undefined,
         customerId: customer._id,
         isPrimary: true,
         assignedTo: lead.assignedTo || req.user._id,
       });
+    } else if (companyRecord && !contact.companyId) {
+      contact.companyId = companyRecord._id;
+      await contact.save();
     }
 
     // Optionally create a Deal
@@ -265,6 +299,7 @@ export const convertLeadToCustomer = async (req, res, next) => {
         value: Number(req.body.dealValue || lead.estimatedValue || 5000),
         stage: 'qualified',
         probability: 25,
+        companyId: companyRecord?._id || undefined,
         customerId: customer._id,
         contactId: contact._id,
         assignedTo: lead.assignedTo || req.user._id,

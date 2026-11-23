@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { Organization } from '../models/Organization.js';
 import { User } from '../models/User.js';
 import { logAudit } from '../services/audit/auditService.js';
+import { ALL_ROLES } from '../middleware/roleMiddleware.js';
 
 export const getCurrentOrganization = async (req, res, next) => {
   try {
@@ -83,11 +84,14 @@ export const inviteMember = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(tempPassword, salt);
 
+    const assignableRoles = ALL_ROLES.filter((r) => r !== 'super_admin');
+    const finalRole = assignableRoles.includes(role) ? role : 'employee';
+
     const newUser = await User.create({
       name: name.trim(),
       email: email.toLowerCase().trim(),
       passwordHash,
-      role: ['owner', 'manager', 'employee'].includes(role) ? role : 'employee',
+      role: finalRole,
       organizationId: req.organizationId,
       isVerified: true,
       isActive: true,
@@ -128,7 +132,8 @@ export const updateMemberRole = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Team member not found in this organization.' });
     }
 
-    if (role && ['owner', 'manager', 'employee'].includes(role)) {
+    const assignableRoles = ALL_ROLES.filter((r) => r !== 'super_admin');
+    if (role && assignableRoles.includes(role)) {
       user.role = role;
     }
     if (typeof isActive === 'boolean') {

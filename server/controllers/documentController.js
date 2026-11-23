@@ -3,6 +3,11 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { Document } from '../models/Document.js';
 import { logAudit } from '../services/audit/auditService.js';
+import {
+  encryptDocumentBuffer,
+  decryptDocumentBuffer,
+  isEncryptedDocument,
+} from '../services/security/encryptionService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,6 +75,11 @@ export const uploadDocument = async (req, res, next) => {
 
     const { title, category = 'Other', relatedEntityType = 'general', relatedEntityId, tags } = req.body;
 
+    // Encrypt uploaded file buffer with AES-256-GCM authenticated encryption at rest
+    const rawBuffer = fs.readFileSync(req.file.path);
+    const encryptedBuffer = encryptDocumentBuffer(rawBuffer);
+    fs.writeFileSync(req.file.path, encryptedBuffer);
+
     const doc = await Document.create({
       organizationId: req.organizationId,
       title: (title || req.file.originalname).trim(),
@@ -83,6 +93,7 @@ export const uploadDocument = async (req, res, next) => {
       relatedEntityId: relatedEntityId || undefined,
       uploadedBy: req.user._id,
       tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map((t) => t.trim())) : [],
+      isEncrypted: true,
     });
 
     await logAudit({
@@ -91,12 +102,12 @@ export const uploadDocument = async (req, res, next) => {
       action: 'UPLOAD_DOCUMENT',
       entityType: 'Document',
       entityId: doc._id,
-      metadata: { originalName: doc.originalName, fileSize: doc.fileSize, category: doc.category },
+      metadata: { originalName: doc.originalName, fileSize: doc.fileSize, category: doc.category, encrypted: true },
     });
 
     res.status(201).json({
       success: true,
-      message: 'Document uploaded successfully',
+      message: 'Document encrypted and uploaded successfully',
       data: doc,
     });
   } catch (error) {
@@ -107,6 +118,21 @@ export const uploadDocument = async (req, res, next) => {
 export const downloadDocument = async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    // Check cross-tenant violation
+    const crossCheck = await Document.findById(id);
+    if (crossCheck && crossCheck.organizationId.toString() !== req.organizationId.toString()) {
+      await logAudit({
+        organizationId: req.organizationId,
+        userId: req.user._id,
+        action: 'SECURITY_CROSS_TENANT_BLOCKED',
+        entityType: 'Document',
+        entityId: id,
+        metadata: { targetOrgId: crossCheck.organizationId },
+      });
+      return res.status(403).json({ success: false, message: 'Access denied: cross-tenant access violation.' });
+    }
+
     const doc = await Document.findOne({ _id: id, organizationId: req.organizationId, isDeleted: false });
 
     if (!doc) {
@@ -115,6 +141,28 @@ export const downloadDocument = async (req, res, next) => {
 
     if (!fs.existsSync(doc.filePath)) {
       return res.status(404).json({ success: false, message: 'File not found on storage disk.' });
+    }
+
+    const fileBuffer = fs.readFileSync(doc.filePath);
+
+    // If file is encrypted with AES-256-GCM, authenticate and decrypt before sending
+    if (doc.isEncrypted || isEncryptedDocument(fileBuffer)) {
+      try {
+        const decryptedBuffer = decryptDocumentBuffer(fileBuffer);
+        res.setHeader('Content-Type', doc.mimeType || 'application/octet-stream');
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(doc.originalName)}"`);
+        return res.send(decryptedBuffer);
+      } catch (decryptErr) {
+        await logAudit({
+          organizationId: req.organizationId,
+          userId: req.user._id,
+          action: 'SECURITY_DOCUMENT_INTEGRITY_FAILED',
+          entityType: 'Document',
+          entityId: doc._id,
+          metadata: { error: decryptErr.message },
+        });
+        return res.status(500).json({ success: false, message: 'Document integrity check failed: file may be tampered.' });
+      }
     }
 
     res.download(doc.filePath, doc.originalName);

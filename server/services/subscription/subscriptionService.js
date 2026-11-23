@@ -3,6 +3,30 @@ import { SubscriptionPlan } from '../../models/SubscriptionPlan.js';
 import { Customer } from '../../models/Customer.js';
 import { logAudit } from '../audit/auditService.js';
 
+export const roundMoney = (num) => Math.round(Number(num) * 100) / 100;
+
+export const ALLOWED_TRANSITIONS = {
+  pending: ['active', 'cancelled'],
+  trial: ['active', 'cancelled', 'expired'],
+  active: ['past_due', 'paused', 'cancelled', 'expired'],
+  past_due: ['active', 'cancelled', 'expired'],
+  paused: ['active', 'cancelled'],
+  expired: ['active', 'cancelled'],
+  cancelled: [], // Terminal state
+};
+
+/**
+ * Validates if a state transition is legal in the subscription lifecycle
+ */
+export const validateTransition = (currentStatus, targetStatus) => {
+  if (currentStatus === targetStatus) return true;
+  const allowed = ALLOWED_TRANSITIONS[currentStatus];
+  if (!allowed || !allowed.includes(targetStatus)) {
+    throw new Error(`Invalid subscription state transition from '${currentStatus}' to '${targetStatus}'.`);
+  }
+  return true;
+};
+
 /**
  * Calculates normalized Monthly Recurring Revenue (MRR) for a single subscription
  */
@@ -14,15 +38,15 @@ export const calculateSubscriptionMRR = (subscription) => {
   const { amount, billingFrequency } = subscription;
   switch (billingFrequency) {
     case 'monthly':
-      return amount;
+      return roundMoney(amount);
     case 'quarterly':
-      return amount / 3;
+      return roundMoney(amount / 3);
     case 'semi_annual':
-      return amount / 6;
+      return roundMoney(amount / 6);
     case 'annual':
-      return amount / 12;
+      return roundMoney(amount / 12);
     default:
-      return amount;
+      return roundMoney(amount);
   }
 };
 
@@ -30,7 +54,83 @@ export const calculateSubscriptionMRR = (subscription) => {
  * Calculates normalized Annual Recurring Revenue (ARR) for a single subscription
  */
 export const calculateSubscriptionARR = (subscription) => {
-  return calculateSubscriptionMRR(subscription) * 12;
+  return roundMoney(calculateSubscriptionMRR(subscription) * 12);
+};
+
+/**
+ * Calculates Average Revenue Per User (ARPU)
+ */
+export const calculateARPU = (totalMRR, activeCustomersCount) => {
+  if (!activeCustomersCount || activeCustomersCount <= 0) return 0;
+  return roundMoney(totalMRR / activeCustomersCount);
+};
+
+/**
+ * Calculates Customer Lifetime Value (LTV)
+ */
+export const calculateLTV = (arpu, churnRatePercent) => {
+  if (!arpu || arpu <= 0) return 0;
+  if (!churnRatePercent || churnRatePercent <= 0) {
+    return roundMoney(arpu * 24); // Default 24-month horizon when churn is zero
+  }
+  const monthlyChurnRate = (churnRatePercent / 100);
+  return roundMoney(arpu / monthlyChurnRate);
+};
+
+/**
+ * Calculates Churn Rate %
+ */
+export const calculateChurnRate = (churnedCustomersCount, totalCustomersCount) => {
+  if (!totalCustomersCount || totalCustomersCount <= 0) return 0;
+  return roundMoney((churnedCustomersCount / totalCustomersCount) * 100);
+};
+
+/**
+ * Transitions a subscription to a new target status while enforcing the state machine
+ */
+export const transitionSubscriptionStatus = async ({
+  organizationId,
+  subscriptionId,
+  targetStatus,
+  reason,
+  userId,
+}) => {
+  const subscription = await Subscription.findOne({ _id: subscriptionId, organizationId });
+  if (!subscription) throw new Error('Subscription not found.');
+
+  validateTransition(subscription.status, targetStatus);
+
+  const prevStatus = subscription.status;
+  subscription.status = targetStatus;
+
+  if (targetStatus === 'cancelled') {
+    subscription.cancelledAt = new Date();
+    subscription.cancelReason = reason || 'Subscription cancelled';
+  } else if (targetStatus === 'paused') {
+    subscription.pausedAt = new Date();
+    subscription.pauseReason = reason || 'Subscription paused';
+  }
+
+  subscription.history.push({
+    action: `transitioned_to_${targetStatus}`,
+    fromStatus: prevStatus,
+    toStatus: targetStatus,
+    reason: reason || `Transition from ${prevStatus} to ${targetStatus}`,
+    changedAt: new Date(),
+  });
+
+  await subscription.save();
+
+  await logAudit({
+    organizationId,
+    userId,
+    action: `SUBSCRIPTION_TRANSITION_${targetStatus.toUpperCase()}`,
+    entityType: 'Subscription',
+    entityId: subscription._id,
+    metadata: { fromStatus: prevStatus, toStatus: targetStatus, reason },
+  });
+
+  return subscription;
 };
 
 /**

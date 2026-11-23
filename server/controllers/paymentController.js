@@ -3,11 +3,13 @@ import * as paymentService from '../services/payment/paymentService.js';
 
 export const recordPayment = async (req, res, next) => {
   try {
-    const { customerId, subscriptionId, invoiceId, amount, currency, paymentMethod, transactionReference, status, paidAt, notes } = req.body;
+    const { customerId, subscriptionId, invoiceId, amount, currency, paymentMethod, transactionReference, status, paidAt, notes, idempotencyKey } = req.body;
 
     if (!customerId || !amount) {
       return res.status(400).json({ success: false, message: 'Customer ID and Payment amount are required.' });
     }
+
+    const key = req.headers['idempotency-key'] || idempotencyKey;
 
     const payment = await paymentService.recordPayment({
       organizationId: req.organizationId,
@@ -21,6 +23,7 @@ export const recordPayment = async (req, res, next) => {
       status,
       paidAt,
       notes,
+      idempotencyKey: key,
       userId: req.user._id,
     });
 
@@ -31,6 +34,27 @@ export const recordPayment = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+export const handleWebhook = async (req, res, next) => {
+  try {
+    const signature = req.headers['x-payment-signature'] || req.headers['x-sandbox-signature'];
+    const result = await paymentService.handlePaymentWebhook({
+      payload: req.body,
+      signature,
+    });
+
+    res.json({
+      success: true,
+      message: 'Webhook processed successfully',
+      data: result,
+    });
+  } catch (error) {
+    res.status(error.statusCode || 400).json({
+      success: false,
+      message: error.message || 'Webhook processing failed',
+    });
   }
 };
 

@@ -1,11 +1,12 @@
 import express from 'express';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { enforceTenant } from '../middleware/tenantMiddleware.js';
+import { enforceWritePermission } from '../middleware/roleMiddleware.js';
 import * as dealController from '../controllers/dealController.js';
 
 const router = express.Router();
 
-router.use(authenticate, enforceTenant);
+router.use(authenticate, enforceTenant, enforceWritePermission);
 
 router.get('/pipeline', dealController.getPipelineView);
 router.get('/forecast', dealController.getDealForecast);

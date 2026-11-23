@@ -200,3 +200,30 @@ export const renewSubscription = async (req, res, next) => {
     next(error);
   }
 };
+
+export const transitionStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status, reason } = req.body;
+
+    if (!status) {
+      return res.status(400).json({ success: false, message: 'Target status is required.' });
+    }
+
+    const subscription = await subscriptionService.transitionSubscriptionStatus({
+      organizationId: req.organizationId,
+      subscriptionId: id,
+      targetStatus: status,
+      reason,
+      userId: req.user._id,
+    });
+
+    res.json({
+      success: true,
+      message: `Subscription transitioned to ${status}`,
+      data: subscription,
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};

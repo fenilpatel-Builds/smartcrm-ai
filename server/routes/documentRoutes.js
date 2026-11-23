@@ -5,6 +5,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { enforceTenant } from '../middleware/tenantMiddleware.js';
+import { enforceWritePermission } from '../middleware/roleMiddleware.js';
 import * as documentController from '../controllers/documentController.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -26,14 +27,25 @@ const storage = multer.diskStorage({
   },
 });
 
+const BLOCKED_EXTENSIONS = ['.exe', '.bat', '.cmd', '.sh', '.vbs', '.js', '.msi', '.php', '.py', '.ps1', '.dll', '.com'];
+
+const fileFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (BLOCKED_EXTENSIONS.includes(ext)) {
+    return cb(new Error(`File type '${ext}' is blocked for security reasons.`), false);
+  }
+  cb(null, true);
+};
+
 const upload = multer({
   storage,
+  fileFilter,
   limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB max
 });
 
 const router = express.Router();
 
-router.use(authenticate, enforceTenant);
+router.use(authenticate, enforceTenant, enforceWritePermission);
 
 router.get('/metrics', documentController.getDocumentMetrics);
 router.get('/', documentController.getDocuments);

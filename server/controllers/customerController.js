@@ -9,6 +9,8 @@ import { Deal } from '../models/Deal.js';
 import { SupportTicket } from '../models/SupportTicket.js';
 import { Document } from '../models/Document.js';
 import { Contact } from '../models/Contact.js';
+import { CalendarEvent } from '../models/CalendarEvent.js';
+import { Lead } from '../models/Lead.js';
 import { logAudit } from '../services/audit/auditService.js';
 import { calculateSubscriptionMRR } from '../services/subscription/subscriptionService.js';
 
@@ -214,7 +216,7 @@ export const getCustomerById = async (req, res, next) => {
     }
 
     // Load full 360 profile context
-    const [subscriptions, payments, invoices, timeline, tasks, aiInsights, deals, tickets, documents, contacts] = await Promise.all([
+    const [subscriptions, payments, invoices, timeline, tasks, aiInsights, deals, tickets, documents, contacts, calendarEvents, leads] = await Promise.all([
       Subscription.find({ customerId: id, organizationId: req.organizationId })
         .populate('planId')
         .sort({ createdAt: -1 }),
@@ -238,6 +240,10 @@ export const getCustomerById = async (req, res, next) => {
         .sort({ createdAt: -1 }),
       Contact.find({ customerId: id, organizationId: req.organizationId, isDeleted: false })
         .populate('assignedTo', 'name')
+        .sort({ createdAt: -1 }),
+      CalendarEvent.find({ relatedEntityId: id, organizationId: req.organizationId })
+        .sort({ startDate: 1 }),
+      Lead.find({ convertedCustomerId: id, organizationId: req.organizationId })
         .sort({ createdAt: -1 }),
     ]);
 
@@ -273,6 +279,8 @@ export const getCustomerById = async (req, res, next) => {
         tickets,
         documents,
         contacts,
+        calendarEvents,
+        leads,
       },
     });
   } catch (error) {

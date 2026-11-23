@@ -1,6 +1,7 @@
 import { Deal } from '../models/Deal.js';
 import { Pipeline } from '../models/Pipeline.js';
 import { logAudit } from '../services/audit/auditService.js';
+import { dispatchAutomationTrigger } from '../services/automation/automationEngineService.js';
 
 const STAGE_DEFAULT_PROBABILITIES = {
   discovery: 10,
@@ -185,6 +186,15 @@ export const createDeal = async (req, res, next) => {
       metadata: { title: deal.title, value: deal.value, stage: deal.stage },
     });
 
+    dispatchAutomationTrigger({
+      organizationId: req.organizationId,
+      triggerType: 'deal_created',
+      entityType: 'deal',
+      entityId: deal._id,
+      contextData: { value: deal.value, title: deal.title, stage: deal.stage },
+      userId: req.user._id,
+    }).catch(() => {});
+
     res.status(201).json({
       success: true,
       message: 'Deal created successfully',
@@ -288,6 +298,17 @@ export const updateDealStage = async (req, res, next) => {
       entityId: deal._id,
       metadata: { from: previousStage, to: stage, value: deal.value },
     });
+
+    if (stage === 'closed_won') {
+      dispatchAutomationTrigger({
+        organizationId: req.organizationId,
+        triggerType: 'deal_won',
+        entityType: 'deal',
+        entityId: deal._id,
+        contextData: { value: deal.value, title: deal.title },
+        userId: req.user._id,
+      }).catch(() => {});
+    }
 
     res.json({
       success: true,

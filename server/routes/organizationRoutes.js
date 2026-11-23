@@ -9,10 +9,10 @@ const router = express.Router();
 router.use(authenticate);
 
 router.get('/current', enforceTenant, orgController.getCurrentOrganization);
-router.patch('/current', enforceTenant, authorizeRoles('owner', 'super_admin'), orgController.updateCurrentOrganization);
+router.patch('/current', enforceTenant, authorizeRoles('owner', 'org_admin', 'super_admin'), orgController.updateCurrentOrganization);
 router.get('/members', enforceTenant, orgController.getMembers);
-router.post('/invite', enforceTenant, authorizeRoles('owner', 'super_admin'), orgController.inviteMember);
-router.patch('/members/:id/role', enforceTenant, authorizeRoles('owner', 'super_admin'), orgController.updateMemberRole);
+router.post('/invite', enforceTenant, authorizeRoles('owner', 'org_admin', 'super_admin'), orgController.inviteMember);
+router.patch('/members/:id/role', enforceTenant, authorizeRoles('owner', 'org_admin', 'super_admin'), orgController.updateMemberRole);
 router.get('/all', authorizeRoles('super_admin'), orgController.listAllOrganizations);
 
 export default router;

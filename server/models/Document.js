@@ -61,6 +61,10 @@ const documentSchema = new mongoose.Schema(
         trim: true,
       },
     ],
+    isEncrypted: {
+      type: Boolean,
+      default: true,
+    },
     isDeleted: {
       type: Boolean,
       default: false,

@@ -2,10 +2,11 @@ import express from 'express';
 import * as leadController from '../controllers/leadController.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { enforceTenant } from '../middleware/tenantMiddleware.js';
+import { enforceWritePermission } from '../middleware/roleMiddleware.js';
 
 const router = express.Router();
 
-router.use(authenticate, enforceTenant);
+router.use(authenticate, enforceTenant, enforceWritePermission);
 
 router.post('/', leadController.createLead);
 router.get('/', leadController.getLeads);

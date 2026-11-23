@@ -2,6 +2,9 @@ import { Payment } from '../../models/Payment.js';
 import { Invoice } from '../../models/Invoice.js';
 import { Subscription } from '../../models/Subscription.js';
 import { logAudit } from '../audit/auditService.js';
+import { paymentProvider } from './paymentProvider.js';
+
+export const roundMoney = (num) => Math.round(Number(num) * 100) / 100;
 
 export const recordPayment = async ({
   organizationId,
@@ -15,10 +18,26 @@ export const recordPayment = async ({
   status = 'paid',
   paidAt = new Date(),
   notes = '',
+  idempotencyKey,
   userId,
 }) => {
-  if (amount <= 0) {
+  const cleanAmount = roundMoney(amount);
+  if (cleanAmount <= 0) {
     throw new Error('Payment amount must be greater than zero.');
+  }
+
+  // If using provider charge workflow or idempotency key
+  let providerRef = transactionReference;
+  if (idempotencyKey) {
+    const charge = await paymentProvider.createCharge({
+      amount: cleanAmount,
+      currency,
+      customerId,
+      invoiceId,
+      idempotencyKey,
+      metadata: { organizationId, subscriptionId },
+    });
+    providerRef = charge.transactionReference;
   }
 
   const payment = await Payment.create({
@@ -26,10 +45,10 @@ export const recordPayment = async ({
     customerId,
     subscriptionId,
     invoiceId,
-    amount,
+    amount: cleanAmount,
     currency,
     paymentMethod,
-    transactionReference: transactionReference || `TXN-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+    transactionReference: providerRef || `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
     status,
     paidAt: status === 'paid' ? paidAt : undefined,
     notes,
@@ -39,8 +58,8 @@ export const recordPayment = async ({
   if (invoiceId && status === 'paid') {
     const invoice = await Invoice.findOne({ _id: invoiceId, organizationId });
     if (invoice) {
-      invoice.amountPaid = (invoice.amountPaid || 0) + amount;
-      invoice.balanceDue = Math.max(0, invoice.total - invoice.amountPaid);
+      invoice.amountPaid = roundMoney((invoice.amountPaid || 0) + cleanAmount);
+      invoice.balanceDue = roundMoney(Math.max(0, invoice.total - invoice.amountPaid));
       if (invoice.balanceDue === 0) {
         invoice.status = 'paid';
       } else if (invoice.amountPaid > 0) {
@@ -73,10 +92,41 @@ export const recordPayment = async ({
     action: 'RECORD_PAYMENT',
     entityType: 'Payment',
     entityId: payment._id,
-    metadata: { customerId, amount, status, paymentMethod, invoiceId },
+    metadata: { customerId, amount: cleanAmount, status, paymentMethod, invoiceId },
   });
 
   return payment;
+};
+
+export const handlePaymentWebhook = async ({ payload, signature }) => {
+  const isValid = paymentProvider.verifyWebhookSignature(payload, signature);
+  if (!isValid) {
+    const error = new Error('Invalid payment provider webhook signature.');
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const event = typeof payload === 'string' ? JSON.parse(payload) : payload;
+  const { eventType, data } = event;
+
+  if (eventType === 'charge.succeeded' && data) {
+    const { organizationId, customerId, invoiceId, subscriptionId, amount, transactionReference } = data;
+    if (organizationId && customerId && amount) {
+      return await recordPayment({
+        organizationId,
+        customerId,
+        subscriptionId,
+        invoiceId,
+        amount,
+        paymentMethod: 'provider_webhook',
+        transactionReference,
+        status: 'paid',
+        notes: `Webhook confirmed transaction ${transactionReference}`,
+      });
+    }
+  }
+
+  return { received: true, eventType };
 };
 
 export const getOverduePayments = async (organizationId) => {

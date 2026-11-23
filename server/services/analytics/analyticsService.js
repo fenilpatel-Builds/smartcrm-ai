@@ -6,7 +6,13 @@ import { Payment } from '../../models/Payment.js';
 import { Invoice } from '../../models/Invoice.js';
 import { AIInsight } from '../../models/AIInsight.js';
 import { InteractionLog } from '../../models/InteractionLog.js';
-import { calculateSubscriptionMRR } from '../subscription/subscriptionService.js';
+import {
+  calculateSubscriptionMRR,
+  calculateSubscriptionARR,
+  calculateARPU,
+  calculateLTV,
+  calculateChurnRate,
+} from '../subscription/subscriptionService.js';
 
 export const getDashboardMetrics = async (organizationId) => {
   const orgId = new mongoose.Types.ObjectId(organizationId);
@@ -199,6 +205,17 @@ export const getDashboardMetrics = async (organizationId) => {
     count: l.count,
   }));
 
+  // Calculate Churn, ARPU, and LTV
+  const churnedCustomersCount = await Customer.countDocuments({
+    organizationId: orgId,
+    lifecycleStatus: 'churned',
+    isDeleted: false,
+  });
+
+  const churnRate = calculateChurnRate(churnedCustomersCount, totalCustomers);
+  const arpu = calculateARPU(currentMRR, activeCustomers);
+  const ltv = calculateLTV(arpu, churnRate);
+
   return {
     kpis: {
       totalCustomers: { value: totalCustomers, change: customerGrowthPct, isPositive: customerGrowthPct >= 0 },
@@ -206,6 +223,9 @@ export const getDashboardMetrics = async (organizationId) => {
       totalSubscriptions: { value: totalSubscriptionsCount },
       mrr: { value: currentMRR, label: `$${currentMRR.toLocaleString()}` },
       arr: { value: currentARR, label: `$${currentARR.toLocaleString()}` },
+      arpu: { value: arpu, label: `$${arpu.toLocaleString()}` },
+      ltv: { value: ltv, label: `$${ltv.toLocaleString()}` },
+      churnRate: { value: churnRate, label: `${churnRate}%` },
       pendingPayments: { count: pendingPaymentsCount, amount: pendingPaymentsAmount },
       upcomingRenewals: { count: upcomingRenewalsCount },
       highRiskCustomers: { count: highRiskCount },

@@ -3,6 +3,10 @@ import { AutomationExecution } from '../models/AutomationExecution.js';
 import { Task } from '../models/Task.js';
 import { Notification } from '../models/Notification.js';
 import { logAudit } from '../services/audit/auditService.js';
+import {
+  executeRule,
+  dispatchAutomationTrigger,
+} from '../services/automation/automationEngineService.js';
 
 export const getRules = async (req, res, next) => {
   try {
@@ -180,53 +184,15 @@ export const triggerRuleManually = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Automation rule not found.' });
     }
 
-    const logs = [];
-    logs.push(`Manual trigger started for rule: ${rule.name}`);
-
-    // Execute actions
-    for (const act of rule.actions) {
-      if (act.actionType === 'create_task') {
-        await Task.create({
-          organizationId: req.organizationId,
-          title: act.payload?.title || `Automated Task: ${rule.name}`,
-          description: act.payload?.description || `Triggered by rule ${rule.name}`,
-          priority: act.payload?.priority || 'medium',
-          dueDate: new Date(Date.now() + 86400000 * 2), // 2 days
-          assignedTo: req.user._id,
-          status: 'pending',
-        });
-        logs.push(`Action executed: Created task "${act.payload?.title || rule.name}"`);
-      } else if (act.actionType === 'send_notification') {
-        await Notification.create({
-          organizationId: req.organizationId,
-          userId: req.user._id,
-          title: 'Automation Executed',
-          message: act.payload?.message || `Rule ${rule.name} has run successfully.`,
-          type: 'info',
-        });
-        logs.push('Action executed: Generated user notification');
-      } else {
-        logs.push(`Action simulated: ${act.actionType}`);
-      }
-    }
-
-    rule.lastTriggeredAt = new Date();
-    rule.executionCount = (rule.executionCount || 0) + 1;
-    await rule.save();
-
-    const execution = await AutomationExecution.create({
-      organizationId: req.organizationId,
-      ruleId: rule._id,
-      triggerEvent: rule.triggerType,
-      status: 'success',
-      logs,
-      executedAt: new Date(),
+    const result = await executeRule(rule, {
+      userId: req.user._id,
+      isManual: true,
     });
 
     res.json({
       success: true,
       message: 'Automation executed successfully',
-      data: execution,
+      data: result.execution,
     });
   } catch (error) {
     next(error);
