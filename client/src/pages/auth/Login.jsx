@@ -1,21 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
-import { Sparkles, Shield, UserCheck, Briefcase, Users } from 'lucide-react';
+import {
+  Sparkles,
+  Shield,
+  UserCheck,
+  Briefcase,
+  Users,
+  Eye,
+  EyeOff,
+  Lock,
+  ArrowRight,
+  Loader2,
+  CheckCircle2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [quickLoggingRole, setQuickLoggingRole] = useState(null);
+
+  // 2FA state
+  const [requires2FA, setRequires2FA] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+
   const [searchParams] = useSearchParams();
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('smartcrm_remembered_email');
+    if (savedEmail) {
+      setEmail(savedEmail);
+    }
+  }, []);
+
+  const handleStandardLogin = async (e) => {
+    if (e) e.preventDefault();
     if (!email || !password) {
       toast.error('Please enter both email and password.');
       return;
@@ -23,136 +48,310 @@ export const Login = () => {
 
     setIsLoading(true);
     try {
-      await login(email, password);
-      toast.success('Welcome back to SmartCRM!');
+      if (rememberMe) {
+        localStorage.setItem('smartcrm_remembered_email', email);
+      } else {
+        localStorage.removeItem('smartcrm_remembered_email');
+      }
+
+      const res = await login(email, password, requires2FA ? twoFactorCode : null);
+
+      if (res?.requires2FA) {
+        setRequires2FA(true);
+        toast.info('Two-Factor Authentication required. Enter the 6-digit code from your authenticator app.');
+        return;
+      }
+
+      toast.success('Signed in successfully! Welcome to SmartCRM.');
       navigate('/');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Login failed. Please check your credentials.');
+      toast.error(err.response?.data?.message || 'Login failed. Please verify your credentials.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const setDemoCredentials = (demoEmail) => {
+  const handleInstantLogin = async (demoEmail, roleName) => {
     setEmail(demoEmail);
     setPassword('Password123!');
+    setQuickLoggingRole(roleName);
+
+    try {
+      const res = await login(demoEmail, 'Password123!');
+      if (res?.requires2FA) {
+        setRequires2FA(true);
+        toast.info('Two-Factor Authentication required.');
+        return;
+      }
+      toast.success(`Logged in as ${roleName}!`);
+      navigate('/');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Instant login failed.');
+    } finally {
+      setQuickLoggingRole(null);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <div className="inline-flex w-12 h-12 rounded-2xl bg-gradient-to-tr from-teal-600 to-emerald-400 items-center justify-center text-white font-black text-2xl shadow-lg shadow-teal-500/25 mb-4">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Background Ambient Glows */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Brand Header */}
+      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center z-10">
+        <div className="inline-flex w-14 h-14 rounded-2xl bg-gradient-to-tr from-teal-500 to-emerald-400 items-center justify-center text-white font-black text-2xl shadow-xl shadow-teal-500/20 mb-4 border border-teal-400/30">
           S
         </div>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-          SmartCRM Platform
-        </h2>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-          AI-Powered Customer Relationship & Subscription Management
+        <h1 className="text-3xl font-black text-white tracking-tight sm:text-4xl">
+          SmartCRM AI
+        </h1>
+        <p className="mt-2 text-sm text-slate-400">
+          Enterprise Customer Relationship & Subscription Management Platform
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white dark:bg-slate-900 py-8 px-6 shadow-xl border border-slate-200 dark:border-slate-800 rounded-3xl sm:px-10">
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md z-10">
+        <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl">
           {searchParams.get('expired') && (
-            <div className="mb-4 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 text-amber-800 dark:text-amber-300 text-xs font-medium">
+            <div className="mb-5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium text-center">
               Your session has expired. Please sign in again.
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="Email Address"
-              type="email"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+          {requires2FA ? (
+            /* 2FA Verification Step */
+            <form onSubmit={handleStandardLogin} className="space-y-5">
+              <div className="text-center space-y-1">
+                <div className="w-12 h-12 bg-indigo-500/20 text-indigo-400 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <h2 className="text-lg font-bold text-white">Two-Factor Authentication</h2>
+                <p className="text-xs text-slate-400">
+                  Enter the 6-digit security code generated by your authenticator app for <span className="font-semibold text-slate-200">{email}</span>.
+                </p>
+              </div>
 
-            <Input
-              label="Password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5 text-center">
+                  6-Digit Security Code
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  autoFocus
+                  required
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value.trim())}
+                  placeholder="123456"
+                  className="w-full text-center font-mono text-2xl tracking-[0.5em] bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-teal-500 transition"
+                />
+              </div>
 
-            <div className="flex items-center justify-between text-xs">
-              <label className="flex items-center text-slate-600 dark:text-slate-400">
-                <input type="checkbox" defaultChecked className="rounded border-slate-300 text-teal-600 focus:ring-teal-500 mr-2" />
-                Remember me
-              </label>
-              <Link to="/forgot-password" className="text-teal-600 hover:text-teal-500 font-medium">
-                Forgot password?
-              </Link>
+              <button
+                type="submit"
+                disabled={isLoading || twoFactorCode.length < 6}
+                className="w-full py-3 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black rounded-xl text-sm transition shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    Verify & Access Workspace
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRequires2FA(false)}
+                className="w-full text-center text-xs text-slate-400 hover:text-slate-200 transition"
+              >
+                &larr; Back to standard login
+              </button>
+            </form>
+          ) : (
+            /* Standard Login Form */
+            <form onSubmit={handleStandardLogin} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-teal-500 transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 pr-10 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-teal-500 transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs pt-1">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-400 hover:text-slate-300 select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-950 text-teal-500 focus:ring-teal-500 focus:ring-offset-0"
+                  />
+                  Remember me
+                </label>
+                <Link to="/forgot-password" className="text-teal-400 hover:text-teal-300 font-medium">
+                  Forgot password?
+                </Link>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full mt-2 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black rounded-xl text-sm transition shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    Sign In to Workspace
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* Instant 1-Click Demo Login Grid */}
+          {!requires2FA && (
+            <div className="mt-8 pt-6 border-t border-slate-800/80">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                  ⚡ 1-Click Instant Demo Logins
+                </p>
+                <span className="text-[10px] text-teal-400 font-semibold bg-teal-500/10 px-2 py-0.5 rounded-full border border-teal-500/20">
+                  Click to enter
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                {/* Org Owner */}
+                <button
+                  type="button"
+                  onClick={() => handleInstantLogin('owner@acmesaas.io', 'Org Owner')}
+                  disabled={quickLoggingRole !== null}
+                  className="group p-2.5 rounded-xl border border-slate-800 hover:border-amber-500/60 bg-slate-950/60 hover:bg-amber-950/20 text-left transition relative overflow-hidden"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-6 h-6 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                      <Briefcase className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-bold text-xs text-white group-hover:text-amber-300">Org Owner</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 truncate">David Miller (Full Admin)</p>
+                  {quickLoggingRole === 'Org Owner' && (
+                    <div className="absolute inset-0 bg-amber-950/80 flex items-center justify-center text-xs font-bold text-amber-300 gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Entering...
+                    </div>
+                  )}
+                </button>
+
+                {/* Sales Manager */}
+                <button
+                  type="button"
+                  onClick={() => handleInstantLogin('manager@acmesaas.io', 'Sales Manager')}
+                  disabled={quickLoggingRole !== null}
+                  className="group p-2.5 rounded-xl border border-slate-800 hover:border-emerald-500/60 bg-slate-950/60 hover:bg-emerald-950/20 text-left transition relative overflow-hidden"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-6 h-6 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                      <UserCheck className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-bold text-xs text-white group-hover:text-emerald-300">Sales Manager</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 truncate">Sarah Jenkins (Deals)</p>
+                  {quickLoggingRole === 'Sales Manager' && (
+                    <div className="absolute inset-0 bg-emerald-950/80 flex items-center justify-center text-xs font-bold text-emerald-300 gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Entering...
+                    </div>
+                  )}
+                </button>
+
+                {/* Success Rep */}
+                <button
+                  type="button"
+                  onClick={() => handleInstantLogin('employee@acmesaas.io', 'Success Rep')}
+                  disabled={quickLoggingRole !== null}
+                  className="group p-2.5 rounded-xl border border-slate-800 hover:border-sky-500/60 bg-slate-950/60 hover:bg-sky-950/20 text-left transition relative overflow-hidden"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-6 h-6 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center">
+                      <Users className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-bold text-xs text-white group-hover:text-sky-300">Success Rep</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 truncate">Alex Rivera (Accounts)</p>
+                  {quickLoggingRole === 'Success Rep' && (
+                    <div className="absolute inset-0 bg-sky-950/80 flex items-center justify-center text-xs font-bold text-sky-300 gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Entering...
+                    </div>
+                  )}
+                </button>
+
+                {/* Super Admin */}
+                <button
+                  type="button"
+                  onClick={() => handleInstantLogin('admin@smartcrm.io', 'Super Admin')}
+                  disabled={quickLoggingRole !== null}
+                  className="group p-2.5 rounded-xl border border-slate-800 hover:border-purple-500/60 bg-slate-950/60 hover:bg-purple-950/20 text-left transition relative overflow-hidden"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-6 h-6 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center">
+                      <Shield className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-bold text-xs text-white group-hover:text-purple-300">Super Admin</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 truncate">Root Platform Admin</p>
+                  {quickLoggingRole === 'Super Admin' && (
+                    <div className="absolute inset-0 bg-purple-950/80 flex items-center justify-center text-xs font-bold text-purple-300 gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Entering...
+                    </div>
+                  )}
+                </button>
+              </div>
             </div>
+          )}
 
-            <Button type="submit" variant="primary" className="w-full mt-2" isLoading={isLoading}>
-              Sign In to Workspace
-            </Button>
-          </form>
-
-          {/* Demo Login Quick Fills */}
-          <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 text-center mb-3">
-              ⚡ Quick Demo Logins (Password: Password123!)
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setDemoCredentials('owner@acmesaas.io')}
-                className="flex items-center gap-2 p-2 rounded-xl text-left border border-slate-200 dark:border-slate-700 hover:border-teal-500 text-xs font-semibold hover:bg-teal-50/50 dark:hover:bg-teal-950/30 transition"
-              >
-                <Briefcase className="w-4 h-4 text-teal-600 shrink-0" />
-                <div>
-                  <p className="text-slate-800 dark:text-slate-200">Org Owner</p>
-                  <p className="text-[10px] text-slate-400 truncate">owner@acmesaas.io</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDemoCredentials('manager@acmesaas.io')}
-                className="flex items-center gap-2 p-2 rounded-xl text-left border border-slate-200 dark:border-slate-700 hover:border-teal-500 text-xs font-semibold hover:bg-teal-50/50 dark:hover:bg-teal-950/30 transition"
-              >
-                <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                <div>
-                  <p className="text-slate-800 dark:text-slate-200">Sales Manager</p>
-                  <p className="text-[10px] text-slate-400 truncate">manager@acmesaas.io</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDemoCredentials('employee@acmesaas.io')}
-                className="flex items-center gap-2 p-2 rounded-xl text-left border border-slate-200 dark:border-slate-700 hover:border-teal-500 text-xs font-semibold hover:bg-teal-50/50 dark:hover:bg-teal-950/30 transition"
-              >
-                <Users className="w-4 h-4 text-sky-600 shrink-0" />
-                <div>
-                  <p className="text-slate-800 dark:text-slate-200">Success Rep</p>
-                  <p className="text-[10px] text-slate-400 truncate">employee@acmesaas.io</p>
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setDemoCredentials('admin@smartcrm.io')}
-                className="flex items-center gap-2 p-2 rounded-xl text-left border border-slate-200 dark:border-slate-700 hover:border-teal-500 text-xs font-semibold hover:bg-teal-50/50 dark:hover:bg-teal-950/30 transition"
-              >
-                <Shield className="w-4 h-4 text-purple-600 shrink-0" />
-                <div>
-                  <p className="text-slate-800 dark:text-slate-200">Super Admin</p>
-                  <p className="text-[10px] text-slate-400 truncate">admin@smartcrm.io</p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-6 text-center text-xs text-slate-600 dark:text-slate-400">
-            Don't have a workspace yet?{' '}
-            <Link to="/register" className="font-semibold text-teal-600 hover:text-teal-500">
+          <div className="mt-6 text-center text-xs text-slate-500">
+            Need a new company workspace?{' '}
+            <Link to="/register" className="font-bold text-teal-400 hover:text-teal-300 transition">
               Create an organization
             </Link>
           </div>

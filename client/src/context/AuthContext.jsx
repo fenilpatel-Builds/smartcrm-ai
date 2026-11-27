@@ -38,9 +38,12 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, []);
 
-  const login = async (email, password) => {
-    const response = await api.post('/auth/login', { email, password });
-    if (response.data.success) {
+  const login = async (email, password, twoFactorCode = null) => {
+    const response = await api.post('/auth/login', { email, password, twoFactorCode });
+    if (response.data.requires2FA) {
+      return response.data;
+    }
+    if (response.data.success && response.data.data) {
       const { user: loggedUser, organization: loggedOrg, token: jwtToken } = response.data.data;
       setUser(loggedUser);
       setOrganization(loggedOrg);
@@ -50,6 +53,7 @@ export const AuthProvider = ({ children }) => {
       if (loggedOrg) localStorage.setItem('smartcrm_org', JSON.stringify(loggedOrg));
       return response.data;
     }
+    return response.data;
   };
 
   const register = async (userData) => {

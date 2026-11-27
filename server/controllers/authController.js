@@ -126,6 +126,28 @@ export const login = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
 
+    // Check if user has Two-Factor Authentication (2FA) enabled
+    if (user.twoFactorEnabled) {
+      const { twoFactorCode } = req.body;
+      if (!twoFactorCode) {
+        return res.json({
+          success: true,
+          requires2FA: true,
+          email: user.email,
+          message: 'Two-factor authentication code required.',
+        });
+      }
+
+      const userWithSecret = await User.findById(user._id).select('+twoFactorSecret');
+      const isCodeValid = verifyTotpCode(twoFactorCode, userWithSecret?.twoFactorSecret);
+      if (!isCodeValid) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid 6-digit 2FA code. Please check your authenticator app.',
+        });
+      }
+    }
+
     // Update last login
     user.lastLogin = new Date();
     await user.save();
