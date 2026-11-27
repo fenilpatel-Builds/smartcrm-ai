@@ -717,6 +717,15 @@ export const seedDatabase = async () => {
         mimeType: 'application/pdf',
         category: 'Contract',
         uploadedBy: owner._id,
+        eSignature: {
+          required: true,
+          status: 'signed',
+          signerName: 'David Miller',
+          signerEmail: 'owner@acmesaas.io',
+          signatureHash: 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90',
+          signedAt: new Date(Date.now() - 5 * 86400000),
+          ipAddress: '192.168.1.10',
+        },
       },
       {
         organizationId: organization._id,
@@ -728,6 +737,10 @@ export const seedDatabase = async () => {
         mimeType: 'application/pdf',
         category: 'Proposal',
         uploadedBy: manager._id,
+        eSignature: {
+          required: true,
+          status: 'pending',
+        },
       },
     ]);
 

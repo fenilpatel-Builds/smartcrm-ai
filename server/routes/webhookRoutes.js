@@ -12,7 +12,7 @@ import { requireRole } from '../middleware/roleMiddleware.js';
 const router = express.Router();
 
 router.use(authenticate);
-router.use(requireRole(['super_admin', 'admin']));
+router.use(requireRole(['super_admin', 'owner', 'org_admin', 'admin']));
 
 router.get('/', listWebhooks);
 router.post('/', createWebhook);
