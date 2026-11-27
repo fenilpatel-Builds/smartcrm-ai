@@ -65,6 +65,20 @@ const documentSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    eSignature: {
+      required: { type: Boolean, default: false },
+      status: {
+        type: String,
+        enum: ['not_required', 'pending', 'signed', 'declined'],
+        default: 'not_required',
+      },
+      signerEmail: { type: String, trim: true },
+      signerName: { type: String, trim: true },
+      signatureToken: { type: String, index: true },
+      signatureHash: { type: String },
+      signedAt: { type: Date },
+      ipAddress: { type: String },
+    },
     isDeleted: {
       type: Boolean,
       default: false,

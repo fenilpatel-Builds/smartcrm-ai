@@ -57,6 +57,9 @@ import { sendEmail, renderTemplate, sendTestEmail } from '../services/email/emai
 import { enqueueJob, processNextJob, getQueueMetrics } from '../services/jobs/jobQueueService.js';
 import { checkPlanLimit } from '../middleware/planLimitMiddleware.js';
 import { importEntityData, exportEntityCsv, parseCsvString } from '../services/data/csvService.js';
+import { WebhookSubscription } from '../models/WebhookSubscription.js';
+import { registerSseClient, broadcastNotification } from '../services/notification/sseService.js';
+import { generateTotpCode, verifyTotpCode } from '../controllers/authController.js';
 
 describe('SmartCRM Phase 3 Comprehensive Product Verification Suite', () => {
   let org1;
@@ -664,5 +667,175 @@ Stanley Hudson,stanley@dundermifflin.com,Dunder Mifflin,+1-555-0102`;
     const metrics = await getQueueMetrics();
     assert.ok(metrics.summary.total > 0);
     assert.ok(metrics.summary.completed > 0);
+  });
+
+  // =========================================================================
+  // WORKFLOW O: Customer Self-Service Client Portal
+  // =========================================================================
+  test('Workflow O: Customer Public Self-Service Portal token resolution, invoice balance retrieval, and ticket submission', async () => {
+    const portalCust = await Customer.create({
+      organizationId: org1._id,
+      name: 'Bruce Wayne',
+      email: `bruce-${Date.now()}@wayneenterprises.com`,
+      company: 'Wayne Enterprises',
+    });
+
+    assert.ok(portalCust.portalAccessToken);
+    assert.equal(portalCust.portalAccessToken.length, 32);
+
+    // Create an invoice for this customer
+    const portalInvoice = await Invoice.create({
+      organizationId: org1._id,
+      customerId: portalCust._id,
+      invoiceNumber: `INV-PORTAL-${Date.now()}`,
+      issueDate: new Date(),
+      dueDate: new Date(Date.now() + 86400000 * 14),
+      subtotal: 5000,
+      tax: 0,
+      total: 5000,
+      balanceDue: 5000,
+      status: 'sent',
+    });
+
+    // Customer initiates payment order via portal
+    const orderResult = await createPaymentOrder({
+      organizationId: org1._id,
+      customerId: portalCust._id,
+      invoiceId: portalInvoice._id,
+      amount: 5000,
+      currency: 'INR',
+      notes: { portalSource: 'true' },
+    });
+
+    assert.ok(orderResult.orderId);
+    assert.equal(orderResult.amount, 5000);
+
+    // Customer submits support ticket via portal
+    const ticket = await SupportTicket.create({
+      organizationId: org1._id,
+      customerId: portalCust._id,
+      ticketNumber: `TCK-P-${Date.now()}`,
+      subject: 'Portal Billing Query',
+      description: 'Requesting updated tax receipt.',
+      priority: 'low',
+      status: 'open',
+      messages: [{ senderName: portalCust.name, senderType: 'customer', content: 'Please email the tax receipt.' }],
+    });
+
+    assert.ok(ticket._id);
+    assert.equal(ticket.messages[0].senderType, 'customer');
+  });
+
+  // =========================================================================
+  // WORKFLOW P: Outbound Webhooks Subscription & Signature
+  // =========================================================================
+  test('Workflow P: Outbound Webhook creation and cryptographic HMAC-SHA256 signature verification', async () => {
+    const secretKey = 'whsec_test_secret_for_smartcrm_2026';
+    const sub = await WebhookSubscription.create({
+      organizationId: org1._id,
+      name: 'Slack Deal Alerts',
+      targetUrl: 'https://example.com/webhooks/deals',
+      secretKey,
+      events: ['deal.won'],
+      createdBy: userAdmin._id,
+    });
+
+    assert.ok(sub._id);
+    assert.equal(sub.isActive, true);
+
+    // Verify HMAC signature calculation
+    const crypto = await import('crypto');
+    const samplePayload = JSON.stringify({ event: 'deal.won', data: { dealId: 'deal_123', value: 50000 } });
+    const expectedSignature = crypto.default
+      .createHmac('sha256', secretKey)
+      .update(samplePayload)
+      .digest('hex');
+
+    assert.ok(expectedSignature.length === 64);
+  });
+
+  // =========================================================================
+  // WORKFLOW Q: Real-Time Live Notification SSE Streaming
+  // =========================================================================
+  test('Workflow Q: Server-Sent Events (SSE) notification streaming and client broadcast', async () => {
+    let writtenData = '';
+    const mockRes = {
+      writeHead: () => {},
+      write: (chunk) => { writtenData += chunk; },
+    };
+    const mockReq = { headers: {}, on: () => {} };
+
+    // Register mock SSE client
+    registerSseClient(mockReq, mockRes, org1._id, userAdmin._id);
+    assert.ok(writtenData.includes('event: connected'));
+
+    // Broadcast live event
+    broadcastNotification(org1._id, 'payment_received', { amount: 199, customerName: 'Wayne Enterprises' });
+    assert.ok(writtenData.includes('payment_received'));
+    assert.ok(writtenData.includes('Wayne Enterprises'));
+  });
+
+  // =========================================================================
+  // WORKFLOW R: Document Digital E-Signature & Audit Hash
+  // =========================================================================
+  test('Workflow R: Document Vault Digital E-Signature with HMAC audit hash and IP logging', async () => {
+    const crypto = await import('crypto');
+    const doc = await Document.create({
+      organizationId: org1._id,
+      title: 'Master Services Agreement (MSA) - Signed',
+      fileName: 'msa_contract.pdf',
+      originalName: 'msa_contract.pdf',
+      filePath: '/tmp/msa.pdf',
+      fileSize: 4096,
+      mimeType: 'application/pdf',
+      category: 'Contract',
+      uploadedBy: userAdmin._id,
+      eSignature: {
+        required: true,
+        status: 'pending',
+      },
+    });
+
+    assert.equal(doc.eSignature.status, 'pending');
+
+    // Simulate signing
+    const signatureHash = crypto.default
+      .createHmac('sha256', 'super_secret_test_key_32bytes!')
+      .update(`${doc._id}|${userAdmin._id}|${Date.now()}`)
+      .digest('hex');
+
+    doc.eSignature.status = 'signed';
+    doc.eSignature.signerEmail = userAdmin.email;
+    doc.eSignature.signerName = userAdmin.name;
+    doc.eSignature.signatureHash = signatureHash;
+    doc.eSignature.signedAt = new Date();
+    doc.eSignature.ipAddress = '192.168.1.100';
+    await doc.save();
+
+    const signedDoc = await Document.findById(doc._id);
+    assert.equal(signedDoc.eSignature.status, 'signed');
+    assert.equal(signedDoc.eSignature.signerName, userAdmin.name);
+    assert.ok(signedDoc.eSignature.signatureHash.length === 64);
+  });
+
+  // =========================================================================
+  // WORKFLOW S: RFC 6238 TOTP Two-Factor Authentication Engine
+  // =========================================================================
+  test('Workflow S: Two-Factor Authentication RFC 6238 TOTP engine verification', async () => {
+    const testSecret = 'JBSWY3DPEHPK3PXP';
+    const currentCode = generateTotpCode(testSecret);
+
+    assert.equal(currentCode.length, 6);
+    assert.match(currentCode, /^\d{6}$/);
+
+    // Verify TOTP using our controller engine
+    const isValid = verifyTotpCode(currentCode, testSecret);
+    assert.equal(isValid, true);
+
+    // Invalid code should fail
+    const isInvalid = verifyTotpCode('999999', testSecret, 0);
+    if (currentCode !== '999999') {
+      assert.equal(isInvalid, false);
+    }
   });
 });

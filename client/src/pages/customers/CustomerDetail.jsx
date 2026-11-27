@@ -24,6 +24,7 @@ import {
   Pause,
   XCircle,
   ArrowUpRight,
+  ExternalLink,
   Send,
   Copy,
   ChevronLeft,
@@ -308,6 +309,34 @@ export const CustomerDetail = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                let token = customer?.portalAccessToken;
+                if (!token) {
+                  const res = await api.post(`/portal/generate-link/${id}`);
+                  token = res.data.portalAccessToken;
+                }
+                const url = `${window.location.origin}/portal/${token}`;
+                navigator.clipboard.writeText(url);
+                toast.success('Customer Portal link copied to clipboard!', {
+                  description: 'Clients can view and pay invoices directly from this link.',
+                  action: {
+                    label: 'Open',
+                    onClick: () => window.open(url, '_blank'),
+                  },
+                });
+              } catch (err) {
+                toast.error('Failed to generate portal link');
+              }
+            }}
+          >
+            <ExternalLink className="w-4 h-4 text-blue-500" />
+            Client Portal
+          </Button>
+
           <Button variant="outline" size="sm" onClick={() => setIsLogInteractionOpen(true)}>
             <Plus className="w-4 h-4" />
             Log Interaction

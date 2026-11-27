@@ -3,6 +3,9 @@ import { Subscription } from '../../models/Subscription.js';
 import { Invoice } from '../../models/Invoice.js';
 import { SupportTicket } from '../../models/SupportTicket.js';
 import { Notification } from '../../models/Notification.js';
+import { Organization } from '../../models/Organization.js';
+import { Deal } from '../../models/Deal.js';
+import { Customer } from '../../models/Customer.js';
 import * as emailService from '../email/emailService.js';
 
 let workerIntervalId = null;
@@ -127,6 +130,39 @@ const jobHandlers = {
   send_queued_email: async (payload) => {
     const result = await emailService.sendEmail(payload);
     return { emailLogId: result._id, status: result.status };
+  },
+
+  // Dispatches Weekly Executive Performance & Growth Digest
+  send_weekly_executive_digest: async (payload = {}) => {
+    const orgs = await Organization.find();
+    let digestsSent = 0;
+
+    for (const org of orgs) {
+      const [activeSubs, wonDeals, overdueInvs, customerCount] = await Promise.all([
+        Subscription.find({ organizationId: org._id, status: 'active' }),
+        Deal.find({ organizationId: org._id, stage: 'closed_won' }),
+        Invoice.find({ organizationId: org._id, status: 'overdue' }),
+        Customer.countDocuments({ organizationId: org._id, isDeleted: false }),
+      ]);
+
+      const totalMrr = activeSubs.reduce((sum, s) => {
+        let monthly = s.amount || 0;
+        if (s.billingFrequency === 'annual') monthly /= 12;
+        if (s.billingFrequency === 'quarterly') monthly /= 3;
+        return sum + monthly;
+      }, 0);
+
+      const wonTotal = wonDeals.reduce((sum, d) => sum + (d.value || 0), 0);
+
+      await Notification.create({
+        organizationId: org._id,
+        title: 'Weekly Executive Briefing Ready',
+        message: `Weekly Snapshot: MRR $${totalMrr.toFixed(2)} | Active Customers: ${customerCount} | Closed Deals: $${wonTotal.toLocaleString()} (${wonDeals.length} won) | Overdue Invoices: ${overdueInvs.length}`,
+        type: 'system',
+      });
+      digestsSent++;
+    }
+    return { organizationsProcessed: orgs.length, digestsSent };
   },
 };
 

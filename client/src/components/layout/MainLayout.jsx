@@ -3,10 +3,14 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
 import { AIAssistantDrawer } from '../ui/AIAssistantDrawer';
+import { useLiveNotifications } from '../../hooks/useLiveNotifications';
 
 export const MainLayout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [assistantDrawerOpen, setAssistantDrawerOpen] = useState(false);
+
+  // Initialize real-time server-sent events (SSE) notification streaming
+  useLiveNotifications();
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex">

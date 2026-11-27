@@ -23,6 +23,8 @@ import notificationRoutes from './notificationRoutes.js';
 import communicationRoutes from './communicationRoutes.js';
 import jobRoutes from './jobRoutes.js';
 import dataRoutes from './dataRoutes.js';
+import portalRoutes from './portalRoutes.js';
+import webhookRoutes from './webhookRoutes.js';
 
 const router = express.Router();
 
@@ -80,5 +82,7 @@ router.use('/notifications', notificationRoutes);
 router.use('/communications', communicationRoutes);
 router.use('/jobs', jobRoutes);
 router.use('/data', dataRoutes);
+router.use('/portal', portalRoutes);
+router.use('/webhooks', webhookRoutes);
 
 export default router;

@@ -257,6 +257,17 @@ export const DocumentVault = () => {
                       <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">
                         <FileText className="w-4 h-4 text-teal-600 shrink-0" />
                         {doc.title}
+                        {doc.eSignature?.status === 'signed' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
+                            <FileCheck className="w-3 h-3 text-emerald-600" />
+                            Signed
+                          </span>
+                        )}
+                        {doc.eSignature?.status === 'pending' && (
+                          <span className="inline-flex items-center text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300">
+                            Signature Pending
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-slate-400 truncate max-w-xs">{doc.originalName}</div>
                     </td>
@@ -276,6 +287,23 @@ export const DocumentVault = () => {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        {doc.eSignature?.status !== 'signed' && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.post(`/documents/${doc._id}/sign`);
+                                toast.success(`Document "${doc.title}" digitally signed with cryptographic audit trail!`);
+                                fetchDocuments();
+                              } catch (err) {
+                                toast.error('Digital signature failed');
+                              }
+                            }}
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 rounded"
+                            title="Sign Digitally"
+                          >
+                            <FileCheck className="w-4 h-4 text-emerald-500" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDownload(doc)}
                           className="p-1.5 text-slate-400 hover:text-teal-600 rounded"

@@ -17,12 +17,37 @@ import {
   AlertTriangle,
   Send,
   Zap,
+  Globe,
+  Key,
+  Shield,
+  Trash2,
+  RefreshCw,
+  Plus,
+  Play,
+  Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export const Settings = () => {
   const { user, organization, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState('organization');
+
+  // Webhooks State
+  const [webhooks, setWebhooks] = useState([]);
+  const [loadingWebhooks, setLoadingWebhooks] = useState(false);
+  const [isCreateWebhookOpen, setIsCreateWebhookOpen] = useState(false);
+  const [webhookForm, setWebhookForm] = useState({
+    name: '',
+    targetUrl: '',
+    events: ['deal.won', 'payment.captured'],
+  });
+  const [createdSecret, setCreatedSecret] = useState('');
+
+  // 2FA Security State
+  const [twoFactorModalOpen, setTwoFactorModalOpen] = useState(false);
+  const [twoFactorData, setTwoFactorData] = useState(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [verifying2FA, setVerifying2FA] = useState(false);
 
   // Organization Form State
   const [orgForm, setOrgForm] = useState({
@@ -246,6 +271,109 @@ export const Settings = () => {
     }
   };
 
+  const fetchWebhooks = async () => {
+    try {
+      setLoadingWebhooks(true);
+      const res = await api.get('/webhooks');
+      if (res.data.success) {
+        setWebhooks(res.data.webhooks);
+      }
+    } catch (err) {
+      console.error('Failed to load webhooks', err);
+    } finally {
+      setLoadingWebhooks(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'webhooks') {
+      fetchWebhooks();
+    }
+  }, [activeTab]);
+
+  const handleCreateWebhook = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.post('/webhooks', webhookForm);
+      if (res.data.success) {
+        toast.success('Webhook created successfully!');
+        setCreatedSecret(res.data.webhook.secretKey);
+        fetchWebhooks();
+        setWebhookForm({ name: '', targetUrl: '', events: ['deal.won', 'payment.captured'] });
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to create webhook');
+    }
+  };
+
+  const handleDeleteWebhook = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this webhook subscription?')) return;
+    try {
+      await api.delete(`/webhooks/${id}`);
+      toast.success('Webhook deleted');
+      fetchWebhooks();
+    } catch (err) {
+      toast.error('Failed to delete webhook');
+    }
+  };
+
+  const handleTestWebhook = async (id) => {
+    try {
+      toast.info('Dispatching test webhook payload...');
+      const res = await api.post(`/webhooks/${id}/test`);
+      if (res.data.success) {
+        toast.success('Test webhook delivered successfully!');
+        fetchWebhooks();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Test delivery failed');
+    }
+  };
+
+  const handleStart2FA = async () => {
+    try {
+      const res = await api.post('/auth/2fa/setup');
+      if (res.data.success) {
+        setTwoFactorData(res.data);
+        setTwoFactorModalOpen(true);
+      }
+    } catch (err) {
+      toast.error('Failed to initiate 2FA setup');
+    }
+  };
+
+  const handleVerify2FA = async (e) => {
+    e.preventDefault();
+    setVerifying2FA(true);
+    try {
+      const res = await api.post('/auth/2fa/verify', { code: twoFactorCode });
+      if (res.data.success) {
+        toast.success('2FA successfully enabled for your account!');
+        setTwoFactorModalOpen(false);
+        setTwoFactorCode('');
+        refreshUser();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Invalid verification code');
+    } finally {
+      setVerifying2FA(false);
+    }
+  };
+
+  const handleDisable2FA = async () => {
+    const password = window.prompt('Enter your account password to confirm disabling 2FA:');
+    if (!password) return;
+    try {
+      const res = await api.post('/auth/2fa/disable', { password });
+      if (res.data.success) {
+        toast.success('Two-factor authentication disabled.');
+        refreshUser();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to disable 2FA');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -299,6 +427,26 @@ export const Settings = () => {
           }`}
         >
           SaaS Plan & Usage Limits
+        </button>
+        <button
+          onClick={() => setActiveTab('webhooks')}
+          className={`px-4 py-2 rounded-xl transition shrink-0 ${
+            activeTab === 'webhooks'
+              ? 'bg-teal-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          Webhooks & API ({webhooks.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('security')}
+          className={`px-4 py-2 rounded-xl transition shrink-0 ${
+            activeTab === 'security'
+              ? 'bg-teal-600 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          Security & 2FA
         </button>
       </div>
 
@@ -748,6 +896,269 @@ export const Settings = () => {
           </Card>
         </div>
       )}
+
+      {/* 5. WEBHOOKS & API TAB */}
+      {activeTab === 'webhooks' && (
+        <div className="space-y-6">
+          <Card>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-teal-600" />
+                  Outbound Webhook Subscriptions
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Deliver signed HTTP POST payloads to Slack, Zapier, Make, or custom endpoints in real-time when CRM events trigger.
+                </p>
+              </div>
+              <Button variant="primary" size="sm" onClick={() => setIsCreateWebhookOpen(true)}>
+                <Plus className="w-4 h-4" />
+                Register Webhook
+              </Button>
+            </div>
+
+            {createdSecret && (
+              <div className="mb-6 p-4 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-xs">
+                <div className="flex items-center gap-2 font-bold text-teal-800 dark:text-teal-300 mb-1">
+                  <Key className="w-4 h-4" />
+                  Webhook Signing Secret Generated
+                </div>
+                <p className="text-slate-600 dark:text-slate-300 mb-2">
+                  Save this secret key now. It is used to verify the <code>X-SmartCRM-Signature</code> HMAC-SHA256 header.
+                </p>
+                <code className="block p-2 bg-white dark:bg-slate-900 rounded-lg border border-teal-300 dark:border-teal-700 font-mono text-teal-600 dark:text-teal-400 select-all">
+                  {createdSecret}
+                </code>
+              </div>
+            )}
+
+            {loadingWebhooks ? (
+              <div className="text-center py-12 text-slate-400 text-xs">Loading webhooks...</div>
+            ) : webhooks.length === 0 ? (
+              <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                <Globe className="w-10 h-10 text-slate-400 mx-auto mb-3" />
+                <h4 className="font-bold text-slate-800 dark:text-slate-200 text-sm">No Active Webhook Subscriptions</h4>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
+                  Connect your CRM events to external workflows like Slack alerts, Zapier automations, or your backend microservices.
+                </p>
+                <Button variant="outline" size="sm" onClick={() => setIsCreateWebhookOpen(true)}>
+                  Create Your First Webhook
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {webhooks.map((wh) => (
+                  <div
+                    key={wh._id}
+                    className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{wh.name}</span>
+                        <Badge variant={wh.isActive ? 'success' : 'danger'}>
+                          {wh.isActive ? 'Active' : 'Disabled'}
+                        </Badge>
+                        {wh.lastStatusCode && (
+                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
+                            wh.lastStatusCode < 300 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-red-100 text-red-800'
+                          }`}>
+                            HTTP {wh.lastStatusCode}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs font-mono text-slate-500 truncate max-w-md">{wh.targetUrl}</p>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {wh.events?.map((ev) => (
+                          <span
+                            key={ev}
+                            className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-medium text-slate-600 dark:text-slate-300"
+                          >
+                            {ev}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-center">
+                      <Button variant="outline" size="xs" onClick={() => handleTestWebhook(wh._id)}>
+                        <Play className="w-3.5 h-3.5 text-teal-600" />
+                        Test
+                      </Button>
+                      <Button variant="outline" size="xs" onClick={() => handleDeleteWebhook(wh._id)}>
+                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* 6. SECURITY & 2FA TAB */}
+      {activeTab === 'security' && (
+        <div className="space-y-6">
+          <Card className="max-w-2xl">
+            <div className="flex items-start justify-between gap-4 mb-6">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-indigo-600" />
+                  Two-Factor Authentication (2FA / TOTP)
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Enforce cryptographic time-based one-time password verification on login via Google Authenticator, Authy, or 1Password.
+                </p>
+              </div>
+              <Badge variant={user?.twoFactorEnabled ? 'success' : 'default'}>
+                {user?.twoFactorEnabled ? '2FA Active' : '2FA Disabled'}
+              </Badge>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 mb-6">
+              <div className="flex items-center gap-3">
+                <div className={`p-3 rounded-xl ${user?.twoFactorEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>
+                  <Lock className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                    {user?.twoFactorEnabled ? 'Your account is secured with 2FA' : 'Two-Factor Authentication is currently off'}
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {user?.twoFactorEnabled
+                      ? 'Every login requires your standard password and a 6-digit TOTP verification code.'
+                      : 'We recommend turning on 2FA to prevent unauthorized workspace access.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {user?.twoFactorEnabled ? (
+              <Button variant="outline" onClick={handleDisable2FA} className="text-red-500 hover:text-red-600">
+                Disable Two-Factor Authentication
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={handleStart2FA}>
+                <Shield className="w-4 h-4" />
+                Setup Two-Factor Authentication
+              </Button>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* Create Webhook Modal */}
+      <Modal isOpen={isCreateWebhookOpen} onClose={() => setIsCreateWebhookOpen(false)} title="Register Outbound Webhook">
+        <form onSubmit={handleCreateWebhook} className="space-y-4">
+          <Input
+            label="Webhook Name *"
+            required
+            value={webhookForm.name}
+            onChange={(e) => setWebhookForm({ ...webhookForm, name: e.target.value })}
+            placeholder="e.g. Slack Deal Notifications or Zapier Sync"
+          />
+
+          <Input
+            label="Payload Target URL (HTTPS) *"
+            type="url"
+            required
+            value={webhookForm.targetUrl}
+            onChange={(e) => setWebhookForm({ ...webhookForm, targetUrl: e.target.value })}
+            placeholder="https://hooks.slack.com/services/... or https://api.mycrm.com/webhooks"
+          />
+
+          <div>
+            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Subscribed Trigger Events *
+            </label>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {[
+                { id: 'deal.won', label: 'Deal Won' },
+                { id: 'deal.created', label: 'Deal Created' },
+                { id: 'customer.created', label: 'Customer Created' },
+                { id: 'payment.captured', label: 'Payment Captured' },
+                { id: 'invoice.overdue', label: 'Invoice Overdue' },
+                { id: 'ticket.created', label: 'Support Ticket Created' },
+              ].map((ev) => {
+                const checked = webhookForm.events.includes(ev.id);
+                return (
+                  <label key={ev.id} className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 dark:border-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...webhookForm.events, ev.id]
+                          : webhookForm.events.filter((x) => x !== ev.id);
+                        setWebhookForm({ ...webhookForm, events: next });
+                      }}
+                      className="rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                    />
+                    <span className="text-slate-700 dark:text-slate-300 font-medium">{ev.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button type="button" variant="outline" onClick={() => setIsCreateWebhookOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary">
+              Register Webhook
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* 2FA Setup Modal */}
+      <Modal isOpen={twoFactorModalOpen} onClose={() => setTwoFactorModalOpen(false)} title="Setup Two-Factor Authentication">
+        <form onSubmit={handleVerify2FA} className="space-y-4">
+          <p className="text-xs text-slate-600 dark:text-slate-300">
+            Open your authenticator app (Google Authenticator, Microsoft Authenticator, Authy, or 1Password) and enter the secret code below:
+          </p>
+
+          <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-center">
+            <span className="text-xs text-slate-400 block mb-1">Base32 Secret Key</span>
+            <code className="text-sm font-bold font-mono tracking-widest text-teal-600 dark:text-teal-400 select-all">
+              {twoFactorData?.secret}
+            </code>
+          </div>
+
+          {twoFactorData?.recoveryCodes && (
+            <div>
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                Emergency Backup Recovery Codes:
+              </span>
+              <div className="grid grid-cols-3 gap-1 bg-slate-50 dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                {twoFactorData.recoveryCodes.map((c, i) => (
+                  <span key={i}>{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <Input
+            label="Enter 6-Digit Authenticator Code *"
+            required
+            maxLength={6}
+            value={twoFactorCode}
+            onChange={(e) => setTwoFactorCode(e.target.value.trim())}
+            placeholder="123456"
+            className="text-center font-mono text-lg tracking-widest"
+          />
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button type="button" variant="outline" onClick={() => setTwoFactorModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" loading={verifying2FA}>
+              Verify & Enable
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Invite Member Modal */}
       <Modal isOpen={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} title="Invite Team Member">

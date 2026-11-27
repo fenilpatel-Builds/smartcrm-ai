@@ -227,3 +227,52 @@ export const getDocumentMetrics = async (req, res, next) => {
     next(error);
   }
 };
+
+export const signDocument = async (req, res, next) => {
+  try {
+    const crypto = await import('crypto');
+    const doc = await Document.findOne({
+      _id: req.params.id,
+      organizationId: req.organizationId,
+      isDeleted: false,
+    });
+
+    if (!doc) {
+      return res.status(404).json({ success: false, message: 'Document not found' });
+    }
+
+    const signatureHash = crypto.default
+      .createHmac('sha256', process.env.ENCRYPTION_KEY || 'default_secret_vault_key_32bytes!')
+      .update(`${doc._id}|${req.user._id}|${Date.now()}`)
+      .digest('hex');
+
+    doc.eSignature = {
+      required: true,
+      status: 'signed',
+      signerEmail: req.user.email,
+      signerName: req.user.name,
+      signatureHash,
+      signedAt: new Date(),
+      ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+    };
+
+    await doc.save();
+
+    await logAudit({
+      organizationId: req.organizationId,
+      userId: req.user._id,
+      action: 'DOCUMENT_E_SIGNED',
+      entityType: 'Document',
+      entityId: doc._id,
+      metadata: { signatureHash, signedAt: doc.eSignature.signedAt },
+    });
+
+    return res.json({
+      success: true,
+      message: 'Document digitally signed and verified.',
+      document: doc,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

@@ -26,6 +26,7 @@ import { AICRMAssistant } from '../pages/ai/AICRMAssistant';
 import { Reports } from '../pages/analytics/Reports';
 import { AuditLogs } from '../pages/audit/AuditLogs';
 import { Settings } from '../pages/settings/Settings';
+import ClientPortal from '../pages/portal/ClientPortal';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -52,6 +53,7 @@ export const AppRoutes = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/portal/:token" element={<ClientPortal />} />
 
       {/* Protected SaaS Application Routes */}
       <Route

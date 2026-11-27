@@ -51,6 +51,7 @@ router.use(authenticate, enforceTenant, enforceWritePermission);
 router.get('/metrics', documentController.getDocumentMetrics);
 router.get('/', documentController.getDocuments);
 router.post('/upload', enforcePlanLimit('storage'), upload.single('file'), documentController.uploadDocument);
+router.post('/:id/sign', documentController.signDocument);
 router.get('/:id/download', documentController.downloadDocument);
 router.delete('/:id', documentController.deleteDocument);
 

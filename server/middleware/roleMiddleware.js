@@ -36,6 +36,11 @@ export const authorizeRoles = (...allowedRoles) => {
   };
 };
 
+export const requireRole = (roles) => {
+  const allowed = Array.isArray(roles) ? roles : [roles];
+  return authorizeRoles(...allowed);
+};
+
 /**
  * Ensures that read-only roles (e.g., 'viewer') cannot execute write operations (POST, PUT, PATCH, DELETE)
  */

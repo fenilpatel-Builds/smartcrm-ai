@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 
 const customerSchema = new mongoose.Schema(
   {
@@ -19,6 +20,12 @@ const customerSchema = new mongoose.Schema(
       required: [true, 'Customer email is required'],
       trim: true,
       lowercase: true,
+      index: true,
+    },
+    portalAccessToken: {
+      type: String,
+      unique: true,
+      sparse: true,
       index: true,
     },
     phone: {
@@ -82,5 +89,13 @@ const customerSchema = new mongoose.Schema(
 // Compound index for fast tenant search
 customerSchema.index({ organizationId: 1, email: 1 });
 customerSchema.index({ organizationId: 1, name: 'text', company: 'text', email: 'text' });
+
+// Auto-generate portal access token if absent
+customerSchema.pre('save', function (next) {
+  if (!this.portalAccessToken) {
+    this.portalAccessToken = crypto.randomBytes(16).toString('hex');
+  }
+  next();
+});
 
 export const Customer = mongoose.model('Customer', customerSchema);
